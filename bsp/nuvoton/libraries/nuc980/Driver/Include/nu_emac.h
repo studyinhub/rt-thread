@@ -29,7 +29,7 @@ extern "C"
   @{
 */
 
-#define EMAC_PHY_ADDR      1UL    /*!<  PHY address, this address is board dependent \hideinitializer */
+#define EMAC_PHY_ADDR      0UL    /*!<  PHY address, this address is board dependent \hideinitializer */
 #define EMAC_RX_DESC_SIZE  64UL    /*!<  Number of Rx Descriptors, should be 2 at least \hideinitializer */
 #define EMAC_TX_DESC_SIZE  32UL    /*!<  Number of Tx Descriptors, should be 2 at least \hideinitializer */
 #define EMAC_CAMENTRY_NB   16UL   /*!<  Number of CAM \hideinitializer */

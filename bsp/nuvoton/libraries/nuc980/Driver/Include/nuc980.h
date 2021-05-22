@@ -1608,7 +1608,7 @@
     */
     typedef void             *PVOID;    ///< Define void pointer data type
     typedef void              VOID;     ///< Define void data type
-    typedef char              BOOL;     ///< Define bool data type
+    typedef uint8_t           BOOL;     ///< Define bool data type
     typedef char             *PBOOL;    ///< Define bool pointer data type
 
     typedef char              INT8;     ///< Define 8-bit singed data type
@@ -1667,8 +1667,13 @@
         #define NULL           (0)      ///< NULL pointer
     #endif
 
-    #define TRUE           (1)      ///< Boolean true, define to use in API parameters or return value
-    #define FALSE          (0)      ///< Boolean false, define to use in API parameters or return value
+    #ifndef TRUE    
+        #define TRUE           (1)      ///< Boolean true, define to use in API parameters or return value
+    #endif
+
+    #ifndef FALSE
+        #define FALSE          (0)      ///< Boolean false, define to use in API parameters or return value
+    #endif
 
     #define ENABLE         (1)      ///< Enable, define to use in API parameters
     #define DISABLE        (0)      ///< Disable, define to use in API parameters
