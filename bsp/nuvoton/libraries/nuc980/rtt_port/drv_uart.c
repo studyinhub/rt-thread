@@ -460,7 +460,7 @@ static rt_err_t nu_uart_configure(struct rt_serial_device *serial, struct serial
         break;
 
     default:
-        rt_kprintf("Unsupported data length");
+				rt_kprintf("Unsupported data length:%d\n",cfg->data_bits);
         ret = RT_EINVAL;
         goto exit_nu_uart_configure;
     }

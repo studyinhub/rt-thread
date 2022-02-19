@@ -19,7 +19,7 @@ extern "C" {
 
 #include <rtthread.h>
 
-#define RT_DEBUG_USB                    0x00
+#define RT_DEBUG_USB                    0x01
 #define USB_DYNAMIC                     0x00
 
 #define USB_CLASS_DEVICE                0x00
@@ -567,7 +567,7 @@ typedef struct ustorage_csw* ustorage_csw_t;
 
 /* the priority of USB thread */
 #ifndef RT_USBD_THREAD_PRIO
-#define RT_USBD_THREAD_PRIO 8
+#define RT_USBD_THREAD_PRIO 2
 #endif
 
 

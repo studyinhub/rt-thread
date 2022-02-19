@@ -1,0 +1,140 @@
+<mxfile host="65bd71144e">
+    <diagram id="KyKqUE1w_Dh2jLFXQ3_e" name="Page-1">
+        <mxGraphModel dx="2327" dy="1634" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#999999" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="网关" style="whiteSpace=wrap;html=1;fillColor=#76608a;fontColor=#ffffff;strokeColor=#432D57;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="220" width="610" height="230" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="UART1&lt;br&gt;&lt;span&gt;RS-232 ASCII&lt;/span&gt;" style="whiteSpace=wrap;html=1;fillColor=#fa6800;fontColor=#000000;strokeColor=#C73500;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="394" width="100" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="UART6&lt;br&gt;&lt;span&gt;RS-485 ASCII&lt;/span&gt;" style="whiteSpace=wrap;html=1;fillColor=#fa6800;fontColor=#000000;strokeColor=#C73500;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="394" width="90" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="UART8&lt;br&gt;&lt;span&gt;RS-485 RTU&lt;/span&gt;" style="whiteSpace=wrap;html=1;fillColor=#fa6800;fontColor=#000000;strokeColor=#C73500;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="240" width="90" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="28" value="" style="group" parent="1" vertex="1" connectable="0">
+                    <mxGeometry x="270" y="330" width="50" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="28" vertex="1">
+                    <mxGeometry width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="28" vertex="1">
+                    <mxGeometry y="30" width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="28" vertex="1">
+                    <mxGeometry y="60" width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="28" vertex="1">
+                    <mxGeometry y="90" width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="28" vertex="1">
+                    <mxGeometry x="30" width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="25" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="28" vertex="1">
+                    <mxGeometry x="30" y="30" width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="28" vertex="1">
+                    <mxGeometry x="30" y="60" width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="27" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="28" vertex="1">
+                    <mxGeometry x="30" y="90" width="20" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="31" value="ETH1&lt;br&gt;web:192.168.1.100" style="whiteSpace=wrap;html=1;fillColor=#60a917;fontColor=#ffffff;strokeColor=#2D7600;" parent="1" vertex="1">
+                    <mxGeometry x="680" y="394" width="120" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="33" style="edgeStyle=orthogonalEdgeStyle;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="32" target="6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="32" value="wchusbserial142320&lt;br&gt;模拟 modbus RTU 设备" style="whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="170" y="110" width="230" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="35" style="edgeStyle=orthogonalEdgeStyle;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" source="34" target="4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="34" value="wchusbserial14220&lt;br&gt;模拟 modbus ASCII 设备" style="whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="330" y="480" width="230" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="36" value="UART0&lt;br&gt;&lt;span&gt;RS-232 Console&lt;br&gt;usbmodem123456781&lt;br&gt;&lt;/span&gt;" style="whiteSpace=wrap;html=1;fillColor=#1ba1e2;fontColor=#ffffff;strokeColor=#006EAF;" parent="1" vertex="1">
+                    <mxGeometry x="540" y="340" width="130" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="37" value="micro USB" style="whiteSpace=wrap;html=1;fillColor=#e51400;fontColor=#ffffff;strokeColor=#B20000;" parent="1" vertex="1">
+                    <mxGeometry x="670" y="240" width="120" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="40" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="1" source="38" target="37" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="41" style="edgeStyle=orthogonalEdgeStyle;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="38" target="31" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="830" y="130"/>
+                            <mxPoint x="830" y="414"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="38" value="程序下载方法：&lt;br&gt;暂时使用 NUwriter&lt;br&gt;网页下载方法：&lt;br&gt;利用 tftp 上传&lt;br&gt;" style="text;html=1;resizable=0;autosize=1;align=center;verticalAlign=middle;points=[];fillColor=#76608a;strokeColor=#432D57;rounded=0;fontColor=#ffffff;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="100" width="110" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="44" style="edgeStyle=orthogonalEdgeStyle;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="43" target="32" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="43" value="pyModbus 测试脚本&lt;br&gt;测试脚本在编写过程中可以利用 socat 连接虚拟串口&lt;br&gt;实际测试连接 USB-RS485&lt;br&gt;&lt;br&gt;主要作用：&lt;br&gt;&amp;nbsp;接收网关 RTU 指令并回复" style="whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="1" vertex="1">
+                    <mxGeometry x="720" y="-80" width="300" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="46" style="edgeStyle=orthogonalEdgeStyle;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" source="45" target="34" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="45" value="pyModbus 测试脚本&lt;br&gt;测试脚本在编写过程中可以利用 socat 连接虚拟串口&lt;br&gt;实际测试连接 USB-RS485&lt;br&gt;&lt;br&gt;主要作用：&lt;br&gt;&amp;nbsp;1.发送 modbus ASCII 指令给网关" style="whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;" parent="1" vertex="1">
+                    <mxGeometry x="-70" y="540" width="300" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="oVj5zGJsq3j3RCGlpnWj-46" value="开发：&lt;br&gt;make 编译代码&lt;br&gt;make ram 下载代码到 ram&lt;br&gt;tftp.sh 上传网页到 ram&lt;br&gt;tftp.sh config 上传配置到 ram" style="whiteSpace=wrap;html=1;fillColor=#e3c800;fontColor=#000000;strokeColor=#B09500;align=left;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="270" y="-190" width="300" height="140" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="T2HKSGH3ElPu9H5HbvxF" name="流程">
+        <mxGraphModel dx="1158" dy="807" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#666666" math="0" shadow="1">
+            <root>
+                <mxCell id="eWpMVi4Oahc1egA4uQdr-0"/>
+                <mxCell id="eWpMVi4Oahc1egA4uQdr-1" parent="eWpMVi4Oahc1egA4uQdr-0"/>
+                <mxCell id="eWpMVi4Oahc1egA4uQdr-2" value="board_init()&lt;br&gt;驱动初始化&lt;br&gt;初始化 tftp&amp;nbsp;&lt;br&gt;初始化 webnet&amp;nbsp;&lt;br&gt;加载配置文件&lt;br&gt;/mnt/filesystem/webnet/config.json&lt;br&gt;初始化串口" style="whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="eWpMVi4Oahc1egA4uQdr-1" vertex="1">
+                    <mxGeometry x="90" y="100" width="320" height="240" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-2" value="" style="edgeStyle=none;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-0" target="FzaBIZgUE-1zPihTqksD-1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-0" value="加载配置文件" style="whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                    <mxGeometry x="600" y="110" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-4" value="" style="edgeStyle=none;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-1" target="FzaBIZgUE-1zPihTqksD-3">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-6" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-1" target="FzaBIZgUE-1zPihTqksD-5">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-1" value="是否运行在 RAM" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                    <mxGeometry x="565" y="240" width="190" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-8" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-3" target="FzaBIZgUE-1zPihTqksD-7">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-3" value="构建 cJSON 的默认配置" style="whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                    <mxGeometry x="600" y="410" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-9" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-5" target="FzaBIZgUE-1zPihTqksD-7">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-5" value="从 文件系统读取 json 文件，并转换为 cJSON" style="whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                    <mxGeometry x="850" y="414" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="FzaBIZgUE-1zPihTqksD-7" value="将 cJSON 配置，进行解析，提取初始化串口需要的结构体" style="whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                    <mxGeometry x="565" y="520" width="430" height="100" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

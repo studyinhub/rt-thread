@@ -1,0 +1,15 @@
+{
+    "RTT_Studio.Build.Parallel_Jobs": "8",
+    "cmake.configureOnOpen": true,
+    "cortex-debug.armToolchainPath": "/Users/yangxiyuan/Projects/rtt-projects/toolchains/gcc-arm-none-eabi-5_4-2016q3/bin/",
+    "RTT_Studio.Debuger.ST-Link.Location": "./download.sh",
+    "cortex-debug.stm32cubeprogrammer": "/usr/local/bin/st-flash/tools/bin",
+    "RTT_Studio.Debuger.Adapter": "QEMU",
+    "RTT_Studio.Debuger.QEMU.Location": "$PWD",
+    "RTT_Studio.Toolchain_Location": "/Users/yangxiyuan/Projects/rtt-projects/toolchains/gcc-arm-none-eabi-5_4-2016q3/bin/",
+    "files.associations": {
+        "drv_gpio.h": "c",
+        "at_log.h": "c"
+    },
+    "C_Cpp.errorSquiggles": "Disabled"
+}

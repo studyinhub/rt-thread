@@ -536,7 +536,7 @@ static int nu_pipe_xfer(upipe_t pipe, rt_uint8_t token, void *buffer, int nbytes
             }
             else
             {
-                RT_DEBUG_LOG(RT_DEBUG_USB, ("%d == USBH_PID_DATA, nil buf-%d \n", token, nbytes));
+                //RT_DEBUG_LOG(RT_DEBUG_USB, ("%d == USBH_PID_DATA, nil buf-%d \n", token, nbytes));
             }
 
         } //else

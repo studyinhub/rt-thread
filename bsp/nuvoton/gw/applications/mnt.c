@@ -1,4 +1,4 @@
-/**************************************************************************//**
+/**************************************************************************/ /**
 *
 * @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
 *
@@ -14,31 +14,31 @@
 
 #include <rtthread.h>
 
-#define LOG_TAG         "mnt"
+#define LOG_TAG "mnt"
 #define DBG_ENABLE
 #define DBG_SECTION_NAME "mnt"
-#define DBG_LEVEL DBG_ERROR
+#define DBG_LEVEL DBG_LOG
 #define DBG_COLOR
 #include <rtdbg.h>
 
 #if defined(RT_USING_DFS)
-    #include <dfs_fs.h>
-    #include <dfs_posix.h>
+#include <dfs_fs.h>
+#include <dfs_posix.h>
 #endif
 
 #if defined(PKG_USING_FAL)
-    #include <fal.h>
+#include <fal.h>
 #endif
 
 #if defined(PKG_USING_RAMDISK)
-    #define RAMDISK_NAME         "ramdisk0"
-    #define RAMDISK_UDC          "ramdisk1"
-    #define MOUNT_POINT_RAMDISK0 "/"
+#define RAMDISK_NAME "ramdisk0"
+#define RAMDISK_UDC "ramdisk1"
+#define MOUNT_POINT_RAMDISK0 "/"
 #endif
 
-#if defined(BOARD_USING_STORAGE_SPIFLASH)
-    #define PARTITION_NAME_FILESYSTEM "filesystem"
-    #define MOUNT_POINT_SPIFLASH0 "/mnt/"PARTITION_NAME_FILESYSTEM
+#if defined(BOARD_USING_STORAGE_SPIFLASH) || defined(BOARD_USING_STORAGE_SPINAND)
+#define PARTITION_NAME_FILESYSTEM "filesystem"
+#define MOUNT_POINT_SPIFLASH0 "/mnt/" PARTITION_NAME_FILESYSTEM
 #endif
 
 #ifdef RT_USING_DFS_MNTTABLE
@@ -52,15 +52,14 @@ const void   *data;
 */
 
 const struct dfs_mount_tbl mount_table[] =
-{
-    { RAMDISK_UDC, "/mnt/ram_usbd", "elm", 0, RT_NULL },
+    {
+        {RAMDISK_UDC, "/mnt/ram_usbd", "elm", 0, RT_NULL},
 #if defined(RT_USING_DFS_UFFS)
-    { "nand1", "/mnt/filesystem", "uffs", 0, RT_NULL },
+        {"nand1", "/mnt/filesystem", "uffs", 0, RT_NULL},
 #endif
-    {0},
+        {0},
 };
 #endif
-
 
 #if defined(PKG_USING_RAMDISK)
 
@@ -82,7 +81,7 @@ int ramdisk_device_init(void)
 INIT_DEVICE_EXPORT(ramdisk_device_init);
 
 /* Recursive mkdir */
-static int mkdir_p(const char *dir, const mode_t mode)
+int mkdir_p(const char *dir, const mode_t mode)
 {
     int ret = -1;
     char *tmp = NULL;
@@ -177,8 +176,39 @@ int filesystem_init(void)
             mkdir_p("/mnt", 0x777);
             mkdir_p("/cache", 0x777);
             mkdir_p("/download", 0x777);
+            mkdir_p("/upload", 0x777);
+            mkdir_p("/webnet", 0x777);
+            mkdir_p("/webnet/admin", 0x777);
+            mkdir_p("/webnet/css", 0x777);
+            mkdir_p("/webnet/js", 0x777);
+            mkdir_p("/webnet/fonts", 0x777);
             mkdir_p("/mnt/ram_usbd", 0x777);
             mkdir_p("/mnt/filesystem", 0x777);
+
+            // int fd, size;
+            // char s[] = "RT-Thread Programmer!", buffer[80];
+            // rt_kprintf("Write string %s to test.txt.\n", s);
+
+            // /* 以创建和读写模式打开 /text.txt 文件，如果该文件不存在则创建该文件 */
+            // fd = open("/text.txt", O_WRONLY | O_CREAT);
+            // if (fd >= 0)
+            // {
+            //     write(fd, s, sizeof(s));
+            //     close(fd);
+            //     rt_kprintf("Write done.\n");
+            // }
+
+            // /* 以只读模式打开 /text.txt 文件 */
+            // fd = open("/text.txt", O_RDONLY);
+            // if (fd >= 0)
+            // {
+            //     size = read(fd, buffer, sizeof(buffer));
+            //     close(fd);
+            //     rt_kprintf("Read from file test.txt : %s \n", buffer);
+            //     if (size < 0)
+            //         return -1;
+            // }
+
 #if defined(RT_USBH_MSTORAGE) && defined(UDISK_MOUNTPOINT)
             mkdir_p(UDISK_MOUNTPOINT, 0x777);
 #endif
@@ -201,6 +231,14 @@ int filesystem_init(void)
         result = (rt_err_t)dfs_mkfs("elm", RAMDISK_UDC);
         RT_ASSERT(result == RT_EOK);
     }
+
+    // if (dfs_mount("nand1", MOUNT_POINT_SPIFLASH0, "uffs", 0, 0) != 0)
+    // {
+    //     rt_kprintf("Failed to mount uffs on %s.\n", MOUNT_POINT_SPIFLASH0);
+    //     rt_kprintf("Try to execute 'mkfs -t uffs nand1' first, then reboot.\n");
+    //     goto exit_filesystem_init;
+    // }
+    // rt_kprintf("mount flash0 with uffs type: ok\n");
 
 exit_filesystem_init:
 
@@ -238,3 +276,10 @@ exit_mnt_init_spiflash0:
 INIT_APP_EXPORT(mnt_init_spiflash0);
 #endif
 
+// #if defined(BOARD_USING_STORAGE_SPINAND)
+// int mnt_init_spiflash0(void)
+// {
+
+// }
+// INIT_APP_EXPORT(mnt_init_spiflash0);
+// #endif

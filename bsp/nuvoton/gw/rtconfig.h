@@ -43,7 +43,7 @@
 
 #define RT_USING_DEVICE
 #define RT_USING_CONSOLE
-#define RT_CONSOLEBUF_SIZE 256
+#define RT_CONSOLEBUF_SIZE 1024
 #define RT_CONSOLE_DEVICE_NAME "uart0"
 #define RT_VER_NUM 0x40004
 #define ARCH_ARM
@@ -53,7 +53,7 @@
 
 #define RT_USING_COMPONENTS_INIT
 #define RT_USING_USER_MAIN
-#define RT_MAIN_THREAD_STACK_SIZE 2048
+#define RT_MAIN_THREAD_STACK_SIZE 4096
 #define RT_MAIN_THREAD_PRIORITY 10
 
 /* C++ features */
@@ -103,24 +103,21 @@
 #define RT_USING_DEVICE_IPC
 #define RT_PIPE_BUFSZ 512
 #define RT_USING_SYSTEM_WORKQUEUE
-#define RT_SYSTEM_WORKQUEUE_STACKSIZE 2048
+#define RT_SYSTEM_WORKQUEUE_STACKSIZE 5120
 #define RT_SYSTEM_WORKQUEUE_PRIORITY 23
 #define RT_USING_SERIAL
 #define RT_SERIAL_USING_DMA
 #define RT_SERIAL_RB_BUFSZ 2048
 #define RT_USING_CAN
-#define RT_CAN_USING_HDR
 #define RT_USING_HWTIMER
 #define RT_USING_CPUTIME
 #define RT_USING_I2C
-#define RT_USING_I2C_BITOPS
 #define RT_USING_PIN
-#define RT_USING_ADC
-#define RT_USING_PWM
 #define RT_USING_MTD_NAND
 #define RT_MTD_NAND_DEBUG
 #define RT_USING_RTC
 #define RT_USING_ALARM
+#define RT_USING_SOFT_RTC
 #define RT_USING_SPI
 #define RT_USING_QSPI
 #define RT_USING_WDT
@@ -146,26 +143,14 @@
 
 #define RT_USING_USB_HOST
 #define RT_USBH_MSTORAGE
-#define UDISK_MOUNTPOINT "/mnt/udisk"
-#define RT_USING_USB_DEVICE
+#define UDISK_MOUNTPOINT "/"
 #define RT_USBD_THREAD_STACK_SZ 4096
-#define USB_VENDOR_ID 0x0FFE
-#define USB_PRODUCT_ID 0x0001
-#define RT_USB_DEVICE_COMPOSITE
-#define RT_USB_DEVICE_CDC
-#define RT_USB_DEVICE_NONE
-#define RT_USB_DEVICE_MSTORAGE
-#define RT_VCOM_TASK_STK_SIZE 2048
-#define RT_CDC_RX_BUFSIZE 128
-#define RT_VCOM_SERNO "32021919830108"
-#define RT_VCOM_SER_LEN 14
-#define RT_VCOM_TX_TIMEOUT 1000
-#define RT_USB_MSTORAGE_DISK_NAME "ramdisk1"
 
 /* POSIX layer and C standard library */
 
 #define RT_USING_LIBC
 #define RT_USING_POSIX
+#define RT_USING_MODULE
 #define RT_LIBC_FIXED_TIMEZONE 8
 
 /* Network */
@@ -178,6 +163,7 @@
 /* protocol stack implement */
 
 #define SAL_USING_LWIP
+#define SAL_USING_TLS
 #define SAL_USING_POSIX
 
 /* Network interface device */
@@ -198,13 +184,10 @@
 #define RT_LWIP_IGMP
 #define RT_LWIP_ICMP
 #define RT_LWIP_DNS
-#define RT_LWIP_DHCP
-#define IP_SOF_BROADCAST 1
-#define IP_SOF_BROADCAST_RECV 1
 
 /* Static IPv4 Address */
 
-#define RT_LWIP_IPADDR "192.168.1.30"
+#define RT_LWIP_IPADDR "192.168.1.100"
 #define RT_LWIP_GWADDR "192.168.1.1"
 #define RT_LWIP_MSKADDR "255.255.255.0"
 #define RT_LWIP_UDP
@@ -245,6 +228,21 @@
 /* Utilities */
 
 #define RT_USING_RYM
+#define RT_USING_ULOG
+#define ULOG_OUTPUT_LVL_D
+#define ULOG_OUTPUT_LVL 7
+#define ULOG_USING_ISR_LOG
+#define ULOG_ASSERT_ENABLE
+#define ULOG_LINE_BUF_SIZE 1024
+
+/* log format */
+
+#define ULOG_USING_COLOR
+#define ULOG_OUTPUT_TIME
+#define ULOG_OUTPUT_LEVEL
+#define ULOG_OUTPUT_TAG
+#define ULOG_OUTPUT_THREAD_NAME
+#define ULOG_BACKEND_USING_CONSOLE
 #define RT_USING_UTEST
 #define UTEST_THR_STACK_SIZE 4096
 #define UTEST_THR_PRIORITY 20
@@ -257,8 +255,6 @@
 /* IoT - internet of things */
 
 #define PKG_USING_WEBCLIENT
-#define WEBCLIENT_USING_SAMPLES
-#define WEBCLIENT_USING_FILE_DOWMLOAD
 #define WEBCLIENT_NOT_USE_TLS
 #define PKG_USING_WEBCLIENT_V212
 #define PKG_WEBCLIENT_VER_NUM 0x20102
@@ -269,19 +265,18 @@
 
 /* Select supported modules */
 
-#define WEBNET_USING_LOG
 #define WEBNET_USING_AUTH
 #define WEBNET_USING_CGI
 #define WEBNET_USING_ASP
 #define WEBNET_USING_SSI
 #define WEBNET_USING_INDEX
 #define WEBNET_USING_ALIAS
-#define WEBNET_USING_DAV
 #define WEBNET_USING_UPLOAD
-#define WEBNET_USING_GZIP
 #define WEBNET_CACHE_LEVEL 0
 #define WEBNET_USING_SAMPLES
 #define PKG_USING_WEBNET_LATEST_VERSION
+#define PKG_USING_CJSON
+#define PKG_USING_CJSON_V1714
 #define PKG_USING_FREEMODBUS
 #define PKG_MODBUS_MASTER
 
@@ -304,6 +299,28 @@
 #define MB_SAMPLE_TEST_SLAVE_ADDR 1
 #define MB_MASTER_USING_PORT_NUM 8
 #define MB_MASTER_USING_PORT_BAUDRATE 9600
+#define PKG_MODBUS_SLAVE
+
+/* advanced configuration */
+
+#define RT_S_DISCRETE_INPUT_START 0
+#define RT_S_DISCRETE_INPUT_NDISCRETES 16
+#define RT_S_COIL_START 0
+#define RT_S_COIL_NCOILS 64
+#define RT_S_REG_INPUT_START 0
+#define RT_S_REG_INPUT_NREGS 100
+#define RT_S_REG_HOLDING_START 0
+#define RT_S_REG_HOLDING_NREGS 100
+#define RT_S_HD_RESERVE 0
+#define RT_S_IN_RESERVE 0
+#define RT_S_CO_RESERVE 0
+#define RT_S_DI_RESERVE 0
+#define PKG_MODBUS_SLAVE_RTU
+#define PKG_MODBUS_SLAVE_ASCII
+#define PKG_MODBUS_SLAVE_SAMPLE
+#define MB_SAMPLE_SLAVE_ADDR 1
+#define MB_SLAVE_USING_PORT_NUM 1
+#define MB_SLAVE_USING_PORT_BAUDRATE 115200
 #define PKG_USING_FREEMODBUS_LATEST_VERSION
 
 /* Wi-Fi */
@@ -318,25 +335,70 @@
 #define PKG_NETUTILS_IPERF
 #define PKG_NETUTILS_NTP
 #define NTP_USING_AUTO_SYNC
-#define NTP_AUTO_SYNC_THREAD_STACK_SIZE 1500
 #define NTP_AUTO_SYNC_FIRST_DELAY 30
 #define NTP_AUTO_SYNC_PERIOD 3600
-#define NETUTILS_NTP_HOSTNAME "0.tw.pool.ntp.org"
-#define NETUTILS_NTP_HOSTNAME2 "1.tw.pool.ntp.org"
-#define NETUTILS_NTP_HOSTNAME3 "2.tw.pool.ntp.org"
-#define PKG_USING_NETUTILS_V130
-#define PKG_NETUTILS_VER_NUM 0x10300
+#define NETUTILS_NTP_HOSTNAME "cn.ntp.org.cn"
+#define NETUTILS_NTP_HOSTNAME2 "ntp.rt-thread.org"
+#define NETUTILS_NTP_HOSTNAME3 "edu.ntp.org.cn"
+#define PKG_USING_NETUTILS_LATEST_VERSION
+#define PKG_NETUTILS_VER_NUM 0x99999
 
 /* IoT Cloud */
 
+#define PKG_USING_ALI_IOTKIT
+#define PKG_USING_ALI_IOTKIT_PRODUCT_KEY "a1xjyLUq9Cv"
+#define PKG_USING_ALI_IOTKIT_PRODUCT_SECRET "9dAIUclczImpDFVy"
+#define PKG_USING_ALI_IOTKIT_DEVICE_NAME "test01"
+#define PKG_USING_ALI_IOTKIT_DEVICE_SECRET "80c4f99f5f48e359f190f4a85a30d09e"
+#define PKG_ALI_IOTKIT_SELECT_ITEM
+#define PLATFORM_HAS_STDINT
+#define PLATFORM_HAS_DYNMEM
+#define PLATFORM_HAS_OS
+#define INFRA_STRING
+#define INFRA_NET
+#define INFRA_LIST
+#define INFRA_TIMER
+#define INFRA_JSON_PARSER
+#define INFRA_MD5
+#define INFRA_SHA256
+#define INFRA_REPORT
+#define INFRA_HTTPC
+#define INFRA_COMPAT
+#define DEV_SIGN
+#define MQTT_COMM_ENABLED
+
+/* MQTT Configurations */
+
+#define MQTT_DEFAULT_IMPL
+#define MQTT_DIRECT
+#define DEVICE_MODEL_CLASSIC
+#define OTA_ENABLED
+#define PKG_USING_ALI_IOTKIT_SAMPLES
+#define PKG_USING_ALI_IOTKIT_MQTT_SAMPLE
+#define PKG_USING_ALI_IOTKIT_OTA_SAMPLE
+#define PKG_USING_ALI_IOTKIT_LATEST_VERSION
+#define PKG_ALI_IOTKIT_VER_NUM 0x99999
 
 /* security packages */
 
+#define PKG_USING_MBEDTLS
+
+/* Select Root Certificate */
+
+#define MBEDTLS_AES_ROM_TABLES
+#define MBEDTLS_ECP_WINDOW_SIZE 2
+#define MBEDTLS_SSL_MAX_CONTENT_LEN 8192
+#define PKG_USING_MBEDTLS_LATEST_VERSION
 
 /* language packages */
 
 
 /* multimedia packages */
+
+/* LVGL: powerful and easy-to-use embedded GUI library */
+
+
+/* u8g2: a monochrome graphic library */
 
 
 /* tools packages */
@@ -346,33 +408,47 @@
 
 /* system packages */
 
+/* acceleration: Assembly language or algorithmic acceleration packages */
+
+
+/* CMSIS: ARM Cortex-M Microcontroller Software Interface Standard */
+
+
+/* Micrium: Micrium software products porting for RT-Thread */
+
+#define PKG_USING_FAL
+#define FAL_DEBUG_CONFIG
+#define FAL_DEBUG 1
+#define FAL_PART_HAS_TABLE_CFG
+#define PKG_USING_FAL_LATEST_VERSION
+#define PKG_FAL_VER_NUM 0x99999
 #define PKG_USING_DFS_UFFS
 #define RT_USING_DFS_UFFS
-#define RT_UFFS_ECC_MODE_3
-#define RT_UFFS_ECC_MODE 3
+#define RT_UFFS_ECC_MODE_1
+#define RT_UFFS_ECC_MODE 1
 #define PKG_USING_DFS_UFFS_LATEST_VERSION
 #define PKG_USING_RAMDISK
 #define PKG_USING_RAMDISK_LATEST_VERSION
 
-/* Micrium: Micrium software products porting for RT-Thread */
-
-
 /* peripheral libraries and drivers */
 
+#define PKG_USING_EASYBLINK
+#define PKG_EASYBLINK_MAX_LED_NUMS 2
+#define PKG_EASYBLINK_USING_MSH_CMD
+#define PKG_USING_EASYBLINK_LATEST_VERSION
 
 /* AI packages */
 
 
 /* miscellaneous packages */
 
-#define PKG_USING_OPTPARSE
-#define PKG_USING_OPTPARSE_LATEST_VERSION
-
 /* samples: kernel and components samples */
 
 
 /* entertainment: terminal games and other interesting software packages */
 
+#define PKG_USING_OPTPARSE
+#define PKG_USING_OPTPARSE_LATEST_VERSION
 
 /* Nuvoton Packages Config */
 
@@ -391,9 +467,6 @@
 #define BSP_USING_GPIO
 #define BSP_USING_EMAC
 #define BSP_USING_EMAC0
-#define BSP_USING_RTC
-#define NU_RTC_SUPPORT_IO_RW
-#define NU_RTC_SUPPORT_MSH_CMD
 #define BSP_USING_TMR
 #define BSP_USING_TIMER
 #define BSP_USING_TMR0
@@ -409,32 +482,28 @@
 #define BSP_USING_UART
 #define BSP_USING_UART0
 #define BSP_USING_UART1
-#define BSP_USING_UART1_TX_DMA
-#define BSP_USING_UART1_RX_DMA
+#define BSP_USING_UART2
 #define BSP_USING_UART6
 #define BSP_USING_UART8
-#define BSP_USING_I2C
-#define BSP_USING_I2C0
-#define BSP_USING_I2C2
 #define BSP_USING_SDH
-#define BSP_USING_SDH1
-#define NU_SDH_USING_PDMA
 #define NU_SDH_HOTPLUG
+#define BSP_USING_CAN
 #define BSP_USING_SPI
 #define BSP_USING_SPI_PDMA
 #define BSP_USING_SPI0
 #define BSP_USING_SPI0_PDMA
 #define BSP_USING_SPI1_NONE
 #define BSP_USING_QSPI
-#define BSP_USING_QSPI_PDMA
 #define BSP_USING_QSPI0
-#define BSP_USING_QSPI0_PDMA
 #define BSP_USING_CRYPTO
 #define BSP_USING_WDT
+#define BSP_USING_USBH
 
 /* On-board Peripheral Drivers */
 
 #define BSP_USING_CONSOLE
+#define BOARD_USING_UART1_RS232
+#define BOARD_USING_UART2_4G
 #define BOARD_USING_UART6_RS485
 #define BOARD_USING_UART8_RS485
 #define BOARD_USING_IP101GR

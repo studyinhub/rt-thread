@@ -1,0 +1,1279 @@
+/**************************************************************************/ /**
+*
+* @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
+*
+* SPDX-License-Identifier: Apache-2.0
+*
+* Change Logs:
+* Date            Author       Notes
+* 2020-12-12      Wayne        First version
+*
+******************************************************************************/
+
+#include <rtconfig.h>
+#include <rtdevice.h>
+#include "drv_sys.h"
+#include <drv_gpio.h>
+#include "easyblink.h"
+#include "version.h"
+
+#include <netdev_ipaddr.h>
+#include <netdev.h>
+
+#define AIRSYS
+
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
+
+#define LOG_TAG "main"
+#define LOG_LVL LOG_LVL_DBG
+#include <ulog.h>
+
+#if defined(AIRSYS)
+
+#if defined(RT_USING_PIN)
+
+/* defined the LED_R pin: PB13 */
+#define LED_R NU_GET_PININDEX(NU_PA, 7)
+
+/* defined the LED_Y pin: PB8 */
+#define LED_Y NU_GET_PININDEX(NU_PA, 8)
+
+#define KEY_1 NU_GET_PININDEX(NU_PB, 7)
+
+#endif
+
+#if defined(BOARD_USING_UART8_RS485)
+#include <drv_uart.h>
+#define NU_UART_RS485_DTU_DEVNAME "uart8"
+
+rt_device_t serial_rs485_dtu;
+
+int test_rs485_dtu()
+{
+
+    rt_err_t ret;
+    int str_len;
+    char txbuf[16];
+
+    serial_rs485_dtu = rt_device_find(NU_UART_RS485_DTU_DEVNAME);
+    if (!serial_rs485_dtu)
+    {
+        rt_kprintf("Can't find %s. EXIT.\n", NU_UART_RS485_DTU_DEVNAME);
+        goto exit;
+    }
+
+    rt_kprintf("Find %s.\n", NU_UART_RS485_DTU_DEVNAME);
+
+    /* Interrupt RX */
+    ret = rt_device_open(serial_rs485_dtu, RT_DEVICE_FLAG_INT_RX);
+    RT_ASSERT(ret == RT_EOK);
+
+    /* Nuvoton private command */
+    //nu_uart_set_rs485aud((struct rt_serial_device *)serial_rs485_dtu, RT_FALSE);
+
+    rt_snprintf(&txbuf[0], sizeof(txbuf), "\nHello World!\r\n");
+    str_len = rt_strlen(txbuf);
+
+    /* Say Hello */
+
+    ret = rt_device_write(serial_rs485_dtu, 0, &txbuf[0], str_len);
+    RT_ASSERT(ret == str_len);
+
+exit:
+    ret = rt_device_close(serial_rs485_dtu);
+    RT_ASSERT(ret == RT_EOK);
+    return -1;
+}
+
+#define NU_UART_RS232_ASCII_DEVNAME "uart1"
+rt_device_t serial_rs232_ascii;
+static struct rt_semaphore rx_sem; /* 用于接收消息的信号量 */
+
+/* 接收数据回调函数 */
+static rt_err_t uart_input(rt_device_t dev, rt_size_t size)
+{
+    /* 串口接收到数据后产生中断，调用此回调函数，然后发送接收信号量 */
+    rt_sem_release(&rx_sem);
+
+    return RT_EOK;
+}
+
+static void serial_thread_entry(void *parameter)
+{
+    char ch;
+
+    while (1)
+    {
+        /* 从串口读取一个字节的数据，没有读取到则等待接收信号量 */
+        while (rt_device_read(serial_rs232_ascii, -1, &ch, 1) != 1)
+        {
+            /* 阻塞等待接收信号量，等到信号量后再次读取数据 */
+            rt_sem_take(&rx_sem, RT_WAITING_FOREVER);
+        }
+        /* 读取到的数据通过串口错位输出 */
+        rt_kprintf("recv:%c\n", ch);
+        ch = ch + 1;
+        rt_device_write(serial_rs232_ascii, 0, &ch, 1);
+    }
+}
+
+int init_rs232_ascii()
+{
+    rt_err_t ret;
+    serial_rs232_ascii = rt_device_find(NU_UART_RS232_ASCII_DEVNAME);
+
+    if (!serial_rs232_ascii)
+    {
+        rt_kprintf("Can't find %s. EXIT.\n", NU_UART_RS232_ASCII_DEVNAME);
+        return 0;
+        //goto exit;
+    }
+
+    rt_kprintf("Find %s.\n", NU_UART_RS232_ASCII_DEVNAME);
+
+    /* Interrupt RX */
+    ret = rt_device_open(serial_rs232_ascii, RT_DEVICE_FLAG_INT_RX);
+    RT_ASSERT(ret == RT_EOK);
+
+    /* 初始化信号量 */
+    rt_sem_init(&rx_sem, "rx_sem", 0, RT_IPC_FLAG_FIFO);
+
+    /* 设置接收回调函数 */
+    rt_device_set_rx_indicate(serial_rs232_ascii, uart_input);
+
+    /* 创建 serial 线程 */
+    rt_thread_t thread = rt_thread_create("serial", serial_thread_entry, RT_NULL, 1024, 25, 10);
+    /* 创建成功则启动线程 */
+    if (thread != RT_NULL)
+    {
+        rt_thread_startup(thread);
+    }
+    else
+    {
+        ret = RT_ERROR;
+        goto exit;
+    }
+
+    return ret;
+
+exit:
+    ret = rt_device_close(serial_rs232_ascii);
+    RT_ASSERT(ret == RT_EOK);
+    return ret;
+}
+
+ebled_t led_green = RT_NULL;
+ebled_t led_yellow = RT_NULL;
+
+#define MB_POLL_THREAD_PRIORITY 2
+#define MB_POLL_CYCLE_MS 500
+
+#include "mb.h"
+#include "mb_m.h"
+
+#include "user_mb_app.h"
+
+#define SLAVE_ADDR MB_SAMPLE_TEST_SLAVE_ADDR
+#define PORT_NUM MB_MASTER_USING_PORT_NUM
+#define PORT_BAUDRATE MB_MASTER_USING_PORT_BAUDRATE
+#define PORT_PARITY MB_PAR_NONE
+
+#define MB_SEND_REG_START 0
+#define MB_SEND_REG_NUM 1
+
+#define MB_SEND_THREAD_PRIORITY RT_THREAD_PRIORITY_MAX - 1
+
+extern USHORT usMRegHoldBuf[MB_MASTER_TOTAL_SLAVE_NUM][RT_M_REG_HOLDING_NREGS];
+
+extern USHORT usSRegHoldBuf[S_REG_HOLDING_NREGS];
+
+static void send_thread_entry(void *parameter)
+{
+    eMBMasterReqErrCode error_code = MB_MRE_NO_ERR;
+    rt_uint16_t error_count = 0;
+    USHORT data[2] = {0};
+
+    //USHORT         *usRegHoldingBuf;
+    // usRegHoldingBuf = usSRegHoldBuf;
+
+    while (1)
+    {
+        /* Test Modbus Master */
+        data[0] = (USHORT)(rt_tick_get() / 10);
+        data[1] = (USHORT)(rt_tick_get() % 10);
+
+        //usRegHoldingBuf[3] = (USHORT)(rt_tick_get() / 100);
+
+        error_code = eMBMasterReqWriteMultipleHoldingRegister(SLAVE_ADDR,          /* salve address */
+                                                              MB_SEND_REG_START,   /* register start address */
+                                                              MB_SEND_REG_NUM,     /* register total number */
+                                                              data,                /* data to be written */
+                                                              RT_WAITING_FOREVER); /* timeout */
+
+        /* Record the number of errors */
+        if (error_code != MB_MRE_NO_ERR)
+        {
+            error_count++;
+        }
+    }
+}
+
+static void mb_master_poll(void *parameter)
+{
+    eMBErrorCode eStatus = MB_ENOERR;
+
+    //		int str_len;
+    //		char txbuf[16];
+
+    eStatus = eMBMasterInit(MB_RTU, PORT_NUM, PORT_BAUDRATE, PORT_PARITY);
+    RT_ASSERT(eStatus == MB_ENOERR);
+
+    rt_device_t serial = rt_device_find("uart8");
+
+    //rt_device_open(serial, RT_DEVICE_FLAG_INT_RX);
+    nu_uart_set_rs485aud((struct rt_serial_device *)serial, RT_FALSE);
+
+    eMBMasterEnable();
+
+    //	  rt_snprintf(&txbuf[0], sizeof(txbuf), "\nHello World!\r\n");
+    //    str_len = rt_strlen(txbuf);
+
+    while (1)
+    {
+
+        //rt_kprintf("mb_master_poll\n");
+        // rt_device_write(serial, 0, &txbuf[0], str_len);
+
+        // eb_led_toggle(led_yellow);
+        eMBMasterPoll();
+        rt_thread_mdelay(50);
+    }
+}
+
+static void mb_slave_poll(void *parameter)
+{
+    eMBErrorCode eStatus = MB_ENOERR;
+    eStatus = eMBInit(MB_ASCII, SLAVE_ADDR, 1, 115200, PORT_PARITY);
+    RT_ASSERT(eStatus == MB_ENOERR);
+
+    eStatus = eMBEnable();
+    RT_ASSERT(eStatus == MB_ENOERR);
+
+    while (1)
+    {
+        eb_led_toggle(led_green);
+        eMBPoll();
+        rt_thread_mdelay(50);
+    }
+}
+
+#endif
+
+#else
+
+#define LED_1 NU_GET_PININDEX(NU_PD, 8)
+#define LED_2 NU_GET_PININDEX(NU_PD, 9)
+
+ebled_t led_green = RT_NULL;
+ebled_t led_yellow = RT_NULL;
+
+#define KEY_1 NU_GET_PININDEX(NU_PC, 11)
+
+#define KEY_2 NU_GET_PININDEX(NU_PA, 8)
+
+#define SWITCH_4G NU_GET_PININDEX(NU_PB, 4)
+static uint32_t u32Key2 = KEY_2;
+
+#endif
+
+static uint32_t u32Key1 = KEY_1;
+
+void nu_button_cb(void *args)
+{
+    uint32_t u32Key = *((uint32_t *)(args));
+    rt_kprintf("\nbutton click:%d\n", u32Key);
+    switch (u32Key)
+    {
+    case KEY_1:
+        rt_pin_write(LED_Y, ~rt_pin_read(LED_Y));
+        rt_hw_cpu_reset();
+        break;
+    // case KEY_2:
+    //     rt_kprintf("4G Status change!\n");
+    //     break;
+    }
+}
+
+#define RT_DEVICE_CTRL_WDT_GET_TIMEOUT (1)  /* 获取溢出时间 */
+#define RT_DEVICE_CTRL_WDT_SET_TIMEOUT (2)  /* 设置溢出时间 */
+#define RT_DEVICE_CTRL_WDT_GET_TIMELEFT (3) /* 获取剩余时间 */
+#define RT_DEVICE_CTRL_WDT_KEEPALIVE (4)    /* 喂狗 */
+#define RT_DEVICE_CTRL_WDT_START (5)        /* 启动看门狗 */
+#define RT_DEVICE_CTRL_WDT_STOP (6)         /* 停止看门狗 */
+
+#define WDT_DEVICE_NAME "wdt" /* 看门狗设备名称 */
+
+rt_device_t wdg_dev; /* 看门狗设备句柄 */
+
+static void idle_hook(void)
+{
+    /* 在空闲线程的回调函数里喂狗 */
+
+    if (wdg_dev != RT_NULL)
+    {
+        rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_KEEPALIVE, NULL);
+    }
+}
+
+int main(int argc, char **argv)
+{
+    rt_err_t ret;
+    LOG_I("The current version of APP firmware is %s\n", versionString);
+
+    rt_thread_idle_sethook(idle_hook);
+
+#if defined(AIRSYS)
+
+    rt_thread_t tid_m_poll = RT_NULL, tid2 = RT_NULL, tid_s_poll = RT_NULL;
+
+    rt_uint32_t level;
+
+    rt_kprintf("This for modbus ASCII <==> RTU");
+
+#if defined(RT_USING_PIN)
+
+    /* set LED_R pin mode to output */
+    rt_pin_mode(LED_R, PIN_MODE_OUTPUT);
+
+    /* set LED_Y pin mode to output */
+    rt_pin_mode(LED_Y, PIN_MODE_OUTPUT);
+
+    rt_pin_write(LED_Y, PIN_LOW);
+    rt_pin_write(LED_R, PIN_LOW);
+
+    led_yellow = easyblink_init_led(LED_Y, PIN_LOW);
+    led_green = easyblink_init_led(LED_R, PIN_LOW);
+
+    easyblink(led_yellow, 10, 50, 100);
+    easyblink(led_green, 10, 50, 100);
+
+    eb_led_off(led_yellow);
+    eb_led_off(led_green);
+
+    rt_pin_mode(KEY_1, PIN_MODE_INPUT_PULLUP);
+
+    rt_pin_attach_irq(KEY_1, PIN_IRQ_MODE_FALLING, nu_button_cb, &u32Key1);
+
+    rt_pin_irq_enable(KEY_1, PIN_IRQ_ENABLE);
+#endif
+
+
+
+    //init_rs232_ascii();
+
+    tid_m_poll = rt_thread_create("md_m_poll", mb_master_poll, RT_NULL, 512, 3, 10);
+    if (tid_m_poll != RT_NULL)
+    {
+        rt_thread_startup(tid_m_poll);
+    }
+    else
+    {
+        goto __exit;
+    }
+    //
+    //		tid2 = rt_thread_create("md_m_send", send_thread_entry, RT_NULL, 512, MB_SEND_THREAD_PRIORITY, 10);
+    //    if (tid2 != RT_NULL)
+    //    {
+    //        rt_thread_startup(tid2);
+    //    }
+    //    else
+    //    {
+    //        goto __exit;
+    //    }
+
+    tid_s_poll = rt_thread_create("md_s_poll", mb_slave_poll, RT_NULL, 1024, MB_POLL_THREAD_PRIORITY, 10);
+    if (tid_s_poll != RT_NULL)
+    {
+        rt_thread_startup(tid_s_poll);
+    }
+    else
+    {
+        goto __exit;
+    }
+
+    while (1)
+    {
+
+        // RT_WAITING_FOREVER
+
+        // level = rt_hw_interrupt_disable();
+        // 这个复制并不能完整复制
+        // rt_memcpy(usSRegHoldBuf,usMRegHoldBuf[0],100);
+        // rt_hw_interrupt_enable(level);
+
+        if (tid_m_poll != RT_NULL)
+        {
+            eMBMasterReqReadHoldingRegister(SLAVE_ADDR, 0, 100, RT_WAITING_FOREVER);
+            for (uint8_t i = 0; i < RT_M_REG_HOLDING_NREGS; i++)
+            {
+                //rt_kprintf("%04x ",usMRegHoldBuf[0][i]);
+                usSRegHoldBuf[i] = usMRegHoldBuf[0][i];
+            }
+            //rt_kprintf("%04x \n",usSRegHoldBuf[99]);
+            if (usSRegHoldBuf[99] != 0x00100)
+            {
+                rt_kprintf("modbus master read error!\n");
+            }
+        }
+
+        //				for(uint8_t i=0;i<RT_M_REG_HOLDING_NREGS;i++)
+        //				{
+        //					rt_kprintf("%04x ",usSRegHoldBuf[i]);
+        //				}
+        //				rt_kprintf("\n--------------\n");
+
+        rt_thread_mdelay(1000);
+    }
+
+__exit:
+
+    if (tid_m_poll)
+        rt_thread_delete(tid_m_poll);
+
+    if (tid_s_poll)
+        rt_thread_delete(tid_s_poll);
+
+    if (tid2)
+        rt_thread_delete(tid2);
+
+#else
+
+    rt_kprintf("This for mqtt Trans\n");
+    rt_pin_mode(LED_1, PIN_MODE_OUTPUT);
+    rt_pin_mode(LED_2, PIN_MODE_OUTPUT);
+    // 熄灯
+    rt_pin_write(LED_1, PIN_HIGH);
+    rt_pin_write(LED_2, PIN_HIGH);
+
+    led_yellow = easyblink_init_led(LED_1, PIN_LOW);
+    led_green = easyblink_init_led(LED_2, PIN_LOW);
+
+    easyblink(led_yellow, 20, 50, 100);
+    easyblink(led_green, 20, 50, 100);
+
+    eb_led_off(led_yellow);
+    eb_led_off(led_green);
+
+    while (1)
+    {
+        rt_thread_mdelay(1000);
+    }
+    RT_ASSERT(ret == RT_EOK);
+
+#endif
+
+    return 0;
+}
+
+// static int init_4G_enable_pin()
+// {
+
+//     rt_pin_mode(KEY_1, PIN_MODE_INPUT_PULLUP);
+
+//     rt_pin_attach_irq(KEY_1, PIN_IRQ_MODE_FALLING, nu_button_cb, &u32Key1);
+
+//     rt_pin_irq_enable(KEY_1, PIN_IRQ_ENABLE);
+
+//     rt_pin_mode(KEY_2, PIN_MODE_INPUT_PULLUP);
+
+//     rt_pin_attach_irq(KEY_2, PIN_IRQ_MODE_RISING_FALLING, nu_button_cb, &u32Key2);
+
+//     rt_pin_irq_enable(KEY_2, PIN_IRQ_ENABLE);
+
+//     log_d("Init 4G enable pin!%d\n", NU_GET_PININDEX(NU_PB, 4));
+//     log_d("Init 4G status pin!%d\n", NU_GET_PININDEX(NU_PA, 8));
+//     log_d("Init 4G reset pin!%d\n", NU_GET_PININDEX(NU_PB, 6));
+
+//     //	rt_pin_mode(NU_GET_PININDEX(NU_PB, 4), PIN_MODE_OUTPUT);
+//     //	rt_pin_write(NU_GET_PININDEX(NU_PB, 4), PIN_HIGH);
+//     //	rt_thread_mdelay(1000);
+//     //	rt_pin_write(NU_GET_PININDEX(NU_PB, 4), PIN_LOW);
+
+//     // rt_pin_mode(NU_GET_PININDEX(NU_PB, 6), PIN_MODE_OUTPUT);
+//     // rt_pin_write(NU_GET_PININDEX(NU_PB, 6), PIN_HIGH);
+//     // rt_thread_mdelay(300);
+//     // rt_pin_write(NU_GET_PININDEX(NU_PB, 6), PIN_LOW);
+
+//     return 0;
+// }
+// INIT_DEVICE_EXPORT(init_4G_enable_pin);
+
+#define ENABLE_WDT RT_TRUE
+static int enable_wdt()
+{
+    rt_err_t ret;
+    rt_uint32_t timeout = 26; //26
+    if (ENABLE_WDT)
+    {
+        wdg_dev = rt_device_find("wdt");
+
+        if (!wdg_dev)
+        {
+            rt_kprintf("find %s failed!\n", "wdt");
+            return RT_ERROR;
+        }
+
+        ret = rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_SET_TIMEOUT, &timeout);
+        if (ret != RT_EOK)
+        {
+            rt_kprintf("set %s timeout failed!\n", "wdt");
+            return RT_ERROR;
+        }
+
+        ret = rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_START, RT_NULL);
+        if (ret != RT_EOK)
+        {
+            rt_kprintf("start %s failed!\n", "wdt");
+            return -RT_ERROR;
+        }
+        log_i("Watchdog is ON!Don't forget feed the dog in %d seconds peroidly!", timeout);
+    }
+}
+
+// INIT_DEVICE_EXPORT(enable_wdt);
+
+static int set_date_time()
+{
+    uint16_t year;
+    uint8_t month, day, hour, min, sec;
+
+    LOG_I("Init Time with build Time");
+    // 先将实际设置为编译时间，然后通过 NTP 同步
+    char *token = strtok(timeString, " ");
+    year = atoi(token);
+
+    token = strtok(NULL, " ");
+    month = atoi(token);
+
+    token = strtok(NULL, " ");
+    day = atoi(token);
+
+    token = strtok(NULL, " ");
+    hour = atoi(token);
+
+    token = strtok(NULL, " ");
+    min = atoi(token);
+
+    token = strtok(NULL, " ");
+    sec = atoi(token);
+
+    set_time(hour, min, sec);
+    set_date(year, month, day);
+}
+INIT_PREV_EXPORT(set_date_time);
+
+// https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart
+/* 接收数据回调函数 */
+
+/*
+	这里有两种方式，一种是 DMA，一种是终端
+    但是 DMA 的方式有问题，改用中断模式。
+*/
+
+#define SAMPLE_UART_NAME "uart1" /* 串口设备名称 */
+/* 串口设备句柄 */
+static rt_device_t serial;
+
+// static void serial_thread_entry(void *parameter)
+// {
+//     struct rx_msg msg;
+//     rt_err_t result;
+//     rt_uint32_t rx_length;
+// 	static char rx_buffer[RT_SERIAL_RB_BUFSZ + 1];
+
+//     while (1)
+//     {
+//         rt_memset(&msg, 0, sizeof(msg));
+//         /* 从消息队列中读取消息*/
+//         result = rt_mq_recv(&rx_mq, &msg, sizeof(msg), RT_WAITING_FOREVER);
+
+//         if (result == RT_EOK)
+//         {
+//             /* 从串口读取数据*/
+// 			   log_d("msg.size:%d",msg.size);
+//             rx_length = rt_device_read(msg.dev, -1, rx_buffer, msg.size);
+//             rx_buffer[rx_length] = '\0';
+//             /* 通过串口设备 serial 输出读取到的消息 */
+//             // rt_device_write(serial, 0, rx_buffer, rx_length);
+//             /* 打印数据 */
+//             rt_kprintf("%s\n",rx_buffer);
+//         }
+//     }
+// }
+
+/* 用于接收消息的信号量 */
+static struct rt_semaphore rx_sem;
+/* 消息队列控制块 */
+static struct rt_messagequeue rx_mq;
+
+#define DATA_CMD_END '\r'    /* 结束位设置为 \r，即回车符 */
+#define ONE_DATA_MAXLEN 1024 /* 不定长数据的最大长度 */
+
+/* 串口接收消息结构*/
+struct rx_msg
+{
+    rt_device_t dev;
+    rt_size_t size;
+};
+
+// http://openedv.com/thread-300874-1-1.html
+/* 接收数据回调函数 */
+static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size)
+{
+    struct rx_msg msg;
+    rt_err_t result = RT_EOK;
+    msg.dev = dev;
+    msg.size = size;
+
+    // result = rt_mq_send(&rx_mq, &msg, sizeof(msg));
+    // if ( result == -RT_EFULL)
+    // {
+    //     /* 消息队列满 */
+    //     rt_kprintf("message queue full！\n");
+    // }
+
+    /* 串口接收到数据后产生中断，调用此回调函数，然后发送接收信号量 */
+    if (size > 0)
+    {
+        rt_sem_release(&rx_sem);
+    }
+    return result;
+}
+
+static char uart_sample_get_char(void)
+{
+    char ch;
+
+    while (rt_device_read(serial, 0, &ch, 1) == 0)
+    {
+        rt_sem_control(&rx_sem, RT_IPC_CMD_RESET, RT_NULL);
+        rt_sem_take(&rx_sem, RT_WAITING_FOREVER);
+    }
+    return ch;
+}
+static rt_timer_t oneshort_timer; // on-short
+static rt_bool_t oneshort_timer_flag = RT_FALSE;
+
+static void *pclient = NULL;
+
+static int example_publish(void *handle, char *payload);
+
+char serial_recv_buf[ONE_DATA_MAXLEN] = {0};
+static char recv_index = 0;
+
+static void oneshort_timer_cb(void *parameter)
+{
+
+    LOG_D("one shot timer is timeout");
+    example_publish(pclient, "hello");
+    recv_index = 0;
+    oneshort_timer_flag = RT_TRUE;
+}
+/* 数据解析线程 */
+static void data_parsing(void)
+{
+    char ch;
+
+    oneshort_timer = rt_timer_create("oneshort_timer", oneshort_timer_cb,
+                                     RT_NULL, rt_tick_from_millisecond(1000),
+                                     RT_TIMER_FLAG_ONE_SHOT);
+
+    while (1)
+    {
+        ch = uart_sample_get_char();
+        // 收到第一个字符启动定时器，如果在定时器到期之后没有收到第二个字符则发送
+        // 或者收到 \r 换行之后也立即发送
+
+        // if (oneshort_timer != RT_NULL) rt_timer_start(oneshort_timer);
+
+        // rt_device_write(serial, 0, &ch, 1);
+
+        if (ch == DATA_CMD_END)
+        {
+            serial_recv_buf[recv_index++] = '\0';
+            rt_kprintf("data=%s\r\n", serial_recv_buf);
+            recv_index = 0;
+            example_publish(pclient, serial_recv_buf);
+            continue;
+        }
+        // 如果数据达到了最大长度，则将最后收到的字符进行覆盖
+        recv_index = (recv_index >= ONE_DATA_MAXLEN - 1) ? ONE_DATA_MAXLEN - 1 : recv_index;
+        serial_recv_buf[recv_index++] = ch;
+    }
+}
+
+// 中断方式
+static int init_uart()
+{
+    rt_err_t ret = RT_EOK;
+    char uart_name[RT_NAME_MAX];
+    char str[] = "Hello Device\r\n";
+    struct serial_configure config = RT_SERIAL_CONFIG_DEFAULT; /* 初始化配置参数 */
+
+    rt_strncpy(uart_name, SAMPLE_UART_NAME, RT_NAME_MAX);
+
+    /* 查找串口设备 */
+    serial = rt_device_find(uart_name);
+    if (!serial)
+    {
+        rt_kprintf("find %s failed!\n", uart_name);
+        return RT_ERROR;
+    }
+
+    config.baud_rate = BAUD_RATE_115200; //修改波特率为 115200
+    config.data_bits = DATA_BITS_8;      //数据位 8
+    config.stop_bits = STOP_BITS_1;      //停止位 1
+    config.bufsz = 128;                  //修改缓冲区 buff size 为 128
+    config.parity = PARITY_NONE;         //无奇偶校验位
+
+    rt_device_control(serial, RT_DEVICE_CTRL_CONFIG, &config);
+
+    /* 初始化信号量 */
+    rt_sem_init(&rx_sem, "rx_sem", 0, RT_IPC_FLAG_FIFO);
+    /* 以中断接收及轮询发送模式打开串口设备 */
+    rt_device_open(serial, RT_DEVICE_FLAG_INT_RX);
+    /* 设置接收回调函数 */
+    rt_device_set_rx_indicate(serial, uart_rx_ind);
+    /* 发送字符串 */
+    rt_device_write(serial, 0, str, (sizeof(str) - 1));
+
+    /* 创建 serial 线程 */
+    rt_thread_t thread = rt_thread_create("serial", (void (*)(void *parameter))data_parsing, RT_NULL, 4096, 25, 10);
+    /* 创建成功则启动线程 */
+    if (thread != RT_NULL)
+    {
+        rt_thread_startup(thread);
+    }
+    else
+    {
+        ret = RT_ERROR;
+    }
+    return ret;
+}
+INIT_APP_EXPORT(init_uart);
+
+// dma 方式接收数据不够稳定
+// static int init_uart_dma()
+// {
+// 	rt_err_t ret = RT_EOK;
+// 	char uart_name[RT_NAME_MAX];
+// 	static char msg_pool[256];
+//     char str[] = "Hello Device\r\n";
+
+// 	struct serial_configure config = RT_SERIAL_CONFIG_DEFAULT;  /* 初始化配置参数 */
+
+//  	rt_strncpy(uart_name, SAMPLE_UART_NAME, RT_NAME_MAX);
+// 	  /* 查找串口设备 */
+//     serial = rt_device_find(uart_name);
+//     if (!serial)
+//     {
+//         rt_kprintf("find %s failed!\n", uart_name);
+//         return RT_ERROR;
+//     }
+
+// 	config.baud_rate = BAUD_RATE_115200;        //修改波特率为 115200
+// 	config.data_bits = DATA_BITS_8;           //数据位 8
+// 	config.stop_bits = STOP_BITS_1;           //停止位 1
+// 	config.bufsz     = 128;                     //修改缓冲区 buff size 为 128
+// 	config.parity    = PARITY_NONE;           //无奇偶校验位
+
+// 	rt_device_control(serial, RT_DEVICE_CTRL_CONFIG, &config);
+
+//     /* 初始化消息队列 */
+//     rt_mq_init(&rx_mq, "rx_mq",
+//                msg_pool,                 /* 存放消息的缓冲区 */
+//                sizeof(struct rx_msg),    /* 一条消息的最大长度 */
+//                sizeof(msg_pool),         /* 存放消息的缓冲区大小 */
+//                RT_IPC_FLAG_FIFO);        /* 如果有多个线程等待，按照先来先得到的方法分配消息 */
+
+//     /* 以 DMA 接收及轮询发送方式打开串口设备 */
+//     rt_device_open(serial, RT_DEVICE_FLAG_DMA_RX);
+//     /* 设置接收回调函数 */
+//     rt_device_set_rx_indicate(serial, uart_input);
+//     /* 发送字符串 */
+// 	log_i("send hello");
+//     rt_device_write(serial, 0, str, (sizeof(str) - 1));
+
+//     /* 创建 serial 线程 */
+//     rt_thread_t thread = rt_thread_create("serial", serial_thread_entry, RT_NULL, 2048, 25, 10);
+//     /* 创建成功则启动线程 */
+//     if (thread != RT_NULL)
+//     {
+//         rt_thread_startup(thread);
+//     }
+//     else
+//     {
+//         ret = RT_ERROR;
+//     }
+
+//     return ret;
+// }
+
+// INIT_APP_EXPORT(init_uart_dma);
+
+#include "mqtt_api.h"
+
+void *HAL_Malloc(uint32_t size);
+void HAL_Free(void *ptr);
+void HAL_Printf(const char *fmt, ...);
+int HAL_GetProductKey(char product_key[IOTX_PRODUCT_KEY_LEN + 1]);
+int HAL_GetDeviceName(char device_name[IOTX_DEVICE_NAME_LEN + 1]);
+int HAL_GetDeviceSecret(char device_secret[IOTX_DEVICE_SECRET_LEN]);
+
+int HAL_SetProductKey(char *product_key);
+int HAL_SetDeviceName(char *device_name);
+int HAL_SetDeviceSecret(char *device_secret);
+
+uint64_t HAL_UptimeMs(void);
+int HAL_Snprintf(char *str, const int len, const char *fmt, ...);
+
+static char DEMO_PRODUCT_KEY[IOTX_PRODUCT_KEY_LEN + 1] = {0};
+static char DEMO_DEVICE_NAME[IOTX_DEVICE_NAME_LEN + 1] = {0};
+static char DEMO_DEVICE_SECRET[IOTX_DEVICE_SECRET_LEN + 1] = {0};
+
+static void example_event_handle(void *pcontext, void *pclient, iotx_mqtt_event_msg_pt msg)
+{
+    log_i("msg->event_type : %d", msg->event_type);
+}
+
+static int example_publish(void *handle, char *payload)
+{
+    int res = 0;
+    const char *fmt = "/%s/%s/user/set";
+    char *topic = NULL;
+    int topic_len = 0;
+    // char           *payload = "{\"message\":\"hello!\"}";
+    // {"message":"hello!"}
+
+    topic_len = strlen(fmt) + strlen(DEMO_PRODUCT_KEY) + strlen(DEMO_DEVICE_NAME) + 1;
+    topic = HAL_Malloc(topic_len);
+    if (topic == NULL)
+    {
+        log_i("memory not enough");
+        return -1;
+    }
+
+    memset(topic, 0, topic_len);
+    HAL_Snprintf(topic, topic_len, fmt, DEMO_PRODUCT_KEY, DEMO_DEVICE_NAME);
+
+    log_w("topic123123:%s", topic);
+
+    res = IOT_MQTT_Publish_Simple(0, topic, IOTX_MQTT_QOS0, payload, strlen(payload));
+    if (res < 0)
+    {
+        log_i("publish failed, res = %d", res);
+        HAL_Free(topic);
+        return -1;
+    }
+    HAL_Free(topic);
+    return 0;
+}
+
+static void example_message_arrive(void *pcontext, void *pclient, iotx_mqtt_event_msg_pt msg)
+{
+    iotx_mqtt_topic_info_t *topic_info = (iotx_mqtt_topic_info_pt)msg->msg;
+
+    switch (msg->event_type)
+    {
+    case IOTX_MQTT_EVENT_PUBLISH_RECEIVED:
+        /* print topic name and topic message */
+        log_i("Message Arrived:");
+        log_i("Topic  : %.*s", topic_info->topic_len, topic_info->ptopic);
+        log_i("Payload: %.*s", topic_info->payload_len, topic_info->payload);
+        rt_device_write(serial, 0, topic_info->payload, topic_info->payload_len);
+        break;
+    default:
+        break;
+    }
+}
+
+static int example_subscribe(void *handle)
+{
+    int res = 0;
+    const char *fmt = "/%s/%s/user/get";
+    char *topic = NULL;
+    int topic_len = 0;
+
+    topic_len = strlen(fmt) + strlen(DEMO_PRODUCT_KEY) + strlen(DEMO_DEVICE_NAME) + 1;
+    topic = HAL_Malloc(topic_len);
+    if (topic == NULL)
+    {
+        log_i("memory not enough");
+        return -1;
+    }
+    memset(topic, 0, topic_len);
+    HAL_Snprintf(topic, topic_len, fmt, DEMO_PRODUCT_KEY, DEMO_DEVICE_NAME);
+
+    res = IOT_MQTT_Subscribe(handle, topic, IOTX_MQTT_QOS0, example_message_arrive, NULL);
+    if (res < 0)
+    {
+        log_i("subscribe failed");
+        HAL_Free(topic);
+        return -1;
+    }
+    HAL_Free(topic);
+    return 0;
+}
+
+static void mqtt_thread_entry(void *parameter)
+{
+
+    int loop_cnt = 0;
+    while (1)
+    {
+        if (0 == loop_cnt % 20)
+        {
+            //example_publish(pclient);
+        }
+
+        IOT_MQTT_Yield(pclient, 20000);
+
+        rt_thread_mdelay(30);
+
+        loop_cnt += 1;
+    }
+}
+
+static int init_mqtt()
+{
+
+    rt_err_t ret = RT_EOK;
+
+    int res = 0;
+    iotx_mqtt_param_t mqtt_params;
+
+    log_i("connect to ali-iot");
+
+    // HAL_GetProductKey(DEMO_PRODUCT_KEY);
+    // HAL_GetDeviceName(DEMO_DEVICE_NAME);
+    // HAL_GetDeviceSecret(DEMO_DEVICE_SECRET);
+
+    HAL_SetProductKey(DEMO_PRODUCT_KEY);
+    HAL_SetDeviceName(DEMO_DEVICE_NAME);
+    HAL_SetDeviceSecret(DEMO_DEVICE_SECRET);
+
+    memset(&mqtt_params, 0x0, sizeof(mqtt_params));
+
+    mqtt_params.handle_event.h_fp = example_event_handle;
+
+    char host[128] = {0};
+    sprintf(host, "%s.iot-as-mqtt.cn-shanghai.aliyuncs.com", DEMO_PRODUCT_KEY);
+
+    mqtt_params.host = host;
+    mqtt_params.request_timeout_ms = 5000;
+    mqtt_params.keepalive_interval_ms = 1200000;
+
+    res = example_subscribe(pclient);
+    if (res < 0)
+    {
+        IOT_MQTT_Destroy(&pclient);
+        return -1;
+    }
+
+    pclient = IOT_MQTT_Construct(&mqtt_params);
+    if (NULL == pclient)
+    {
+        log_i("MQTT construct failed");
+        return -1;
+    }
+
+    IOT_MQTT_Yield(pclient, 20000);
+
+    /* 创建 serial 线程 */
+    rt_thread_t thread = rt_thread_create("mqtt", mqtt_thread_entry, RT_NULL, 4096, 5, 10);
+    /* 创建成功则启动线程 */
+    if (thread != RT_NULL)
+    {
+        rt_thread_startup(thread);
+    }
+    else
+    {
+        ret = RT_ERROR;
+    }
+    return ret;
+}
+
+// INIT_APP_EXPORT(init_mqtt);
+
+#include "webclient.h"
+
+#define GET_HEADER_BUFSZ 1024
+#define GET_RESP_BUFSZ 1024
+
+static int webclient_get_comm(const char *uri, char *result)
+{
+    struct webclient_session *session = RT_NULL;
+    unsigned char *buffer = RT_NULL;
+    int index, ret = 0;
+    int bytes_read, resp_status;
+    int content_length = -1;
+
+    buffer = (unsigned char *)web_malloc(GET_RESP_BUFSZ);
+    if (buffer == RT_NULL)
+    {
+        rt_kprintf("no memory for receive buffer.\n");
+        ret = -RT_ENOMEM;
+        goto __exit;
+    }
+
+    /* create webclient session and set header response size */
+    session = webclient_session_create(GET_HEADER_BUFSZ);
+    if (session == RT_NULL)
+    {
+        ret = -RT_ENOMEM;
+        goto __exit;
+    }
+
+    /* send GET request by default header */
+    if ((resp_status = webclient_get(session, uri)) != 200)
+    {
+        rt_kprintf("webclient GET request failed, response(%d) error.\n", resp_status);
+        ret = -RT_ERROR;
+        goto __exit;
+    }
+
+    rt_kprintf("webclient get response data: \n");
+
+    content_length = webclient_content_length_get(session);
+    if (content_length < 0)
+    {
+        rt_kprintf("webclient GET request type is chunked.\n");
+        do
+        {
+            bytes_read = webclient_read(session, (void *)buffer, GET_RESP_BUFSZ);
+            if (bytes_read <= 0)
+            {
+                break;
+            }
+
+            for (index = 0; index < bytes_read; index++)
+            {
+                rt_kprintf("%c", buffer[index]);
+                *result = buffer[index];
+                result++;
+            }
+
+        } while (1);
+
+        rt_kprintf("\n");
+    }
+    else
+    {
+        int content_pos = 0;
+
+        do
+        {
+            bytes_read = webclient_read(session, (void *)buffer,
+                                        content_length - content_pos > GET_RESP_BUFSZ ? GET_RESP_BUFSZ : content_length - content_pos);
+            if (bytes_read <= 0)
+            {
+                break;
+            }
+
+            for (index = 0; index < bytes_read; index++)
+            {
+                rt_kprintf("%c", buffer[index]);
+                *result = buffer[index];
+                result++;
+            }
+
+            content_pos += bytes_read;
+        } while (content_pos < content_length);
+
+        rt_kprintf("\n");
+    }
+
+    // rt_memcpy(result,buffer,rt_strlen(buffer));
+
+__exit:
+    if (session)
+    {
+        webclient_close(session);
+    }
+
+    if (buffer)
+    {
+        web_free(buffer);
+    }
+
+    return ret;
+}
+
+#include "dfs_file.h"
+
+#include "cJSON.h"
+
+static int getDeviceDetail()
+{
+    // 由于之前将 imei 存储在了 ramdisk
+
+    uint32_t length = 0;
+    char buffer[81];
+    struct dfs_fd fd;
+
+    char filename[10] = {0};
+
+    sprintf(filename, "imei");
+
+    if (dfs_file_open(&fd, filename, O_RDONLY) < 0)
+    {
+        rt_kprintf("Open %s failed\n", filename);
+
+        return RT_ERROR;
+    }
+
+    memset(buffer, 0, sizeof(buffer));
+
+    do
+    {
+        length = dfs_file_read(&fd, buffer + length, sizeof(buffer) - 1);
+        if (length > 0)
+        {
+            log_d("%s", buffer);
+        }
+
+    } while (length > 0);
+
+    dfs_file_close(&fd);
+
+    char uri[256] = {0};
+    sprintf(uri, "http://f0a4843a-0c13-4bd8-b784-933245cc8871.bspapp.com/http/admin?action=devices/getDeviceSecret&deviceName=%s", buffer);
+
+    rt_kprintf("uri:%s", uri);
+
+    char *http_resposne = malloc(2048);
+
+    webclient_get_comm(uri, http_resposne);
+
+    rt_kprintf("response:%s", http_resposne);
+
+    rt_kprintf("\r\n");
+    rt_kprintf("\r\n");
+    rt_kprintf("\r\n");
+
+    cJSON *root = NULL;
+    cJSON *item = NULL; //cjson对象
+    cJSON *bodyData = NULL;
+
+    root = cJSON_Parse(http_resposne);
+    rt_kprintf("%s\n", cJSON_PrintUnformatted(root));
+
+    item = cJSON_GetObjectItem(root, "state");
+
+    if (!rt_strcmp(item->valuestring, "ok"))
+    {
+        item = cJSON_GetObjectItem(root, "body");
+
+        rt_kprintf("%s\n", cJSON_Print(item));
+
+        bodyData = cJSON_GetObjectItem(item, "data");
+
+        rt_kprintf("%s\n", cJSON_Print(bodyData));
+
+        item = cJSON_GetObjectItem(bodyData, "productKey");
+        rt_strncpy(DEMO_PRODUCT_KEY, item->valuestring, rt_strlen(item->valuestring));
+        rt_kprintf("DEMO_PRODUCT_KEY:%s\n", DEMO_PRODUCT_KEY);
+
+        item = cJSON_GetObjectItem(bodyData, "deviceName");
+        rt_strncpy(DEMO_DEVICE_NAME, item->valuestring, rt_strlen(item->valuestring));
+        rt_kprintf("DEMO_DEVICE_NAME:%s\n", DEMO_DEVICE_NAME);
+
+        item = cJSON_GetObjectItem(bodyData, "deviceSecret");
+        rt_strncpy(DEMO_DEVICE_SECRET, item->valuestring, rt_strlen(item->valuestring));
+        rt_kprintf("DEMO_DEVICE_SECRET:%s\n", DEMO_DEVICE_SECRET);
+
+        init_mqtt();
+    }
+    else
+    {
+        log_e("get data error,please retry");
+        return RT_ERROR;
+    }
+
+    return RT_EOK;
+    // if(item != RT_NULL)
+    //     cJSON_free(item);
+    // if(bodyData != NULL)
+    //     cJSON_free(bodyData);
+    // if(root != RT_NULL)
+    //     cJSON_free(root);
+
+    // if(http_resposne != RT_NULL)
+    //     rt_free(http_resposne);
+}
+
+MSH_CMD_EXPORT(getDeviceDetail, get imei);
+
+void netdev_callback_4g(struct netdev *netdev, enum netdev_cb_type type)
+{
+    int ret = RT_EOK;
+    int retry = 3;
+    switch (type)
+    {
+    case NETDEV_CB_STATUS_UP:
+        LOG_I("4G UP");
+        easyblink(led_green, -1, 10, 500);
+        break;
+    case NETDEV_CB_STATUS_DOWN:
+        eb_led_off(led_green);
+        LOG_E("4G DOWN");
+        break;
+    case NETDEV_CB_STATUS_LINK_UP:
+        easyblink(led_green, -1, 250, 500);
+        LOG_I("4G LINK UP");
+        //g_LED_MODE.G4 = 1;
+        break;
+    case NETDEV_CB_STATUS_LINK_DOWN:
+        LOG_E("4G LINK DOWN");
+        easyblink_stop(led_green);
+
+        //				extern void rt_hw_cpu_reset(void);
+        //				rt_hw_cpu_reset();
+
+        //g_LED_MODE.G4 = 0;
+        break;
+    case NETDEV_CB_STATUS_INTERNET_UP:
+        LOG_I("4G INTERNET UP!!!");
+        easyblink(led_green, -1, 500, 1000);
+
+        rt_thread_mdelay(5000);
+
+        do
+        {
+            ret = getDeviceDetail();
+            if (ret == RT_EOK)
+            {
+                break;
+            }
+            log_w("get failed,retry:%d", retry);
+        } while (--retry > 0);
+
+        break;
+    case NETDEV_CB_STATUS_INTERNET_DOWN:
+        LOG_W("4G INTERNET DOWN!!!");
+        easyblink_stop(led_green);
+    default:
+        break;
+    }
+}
+
+// static int set_4G_callback()
+// {
+//     struct netdev *netdev_4G = RT_NULL;
+//     netdev_4G = netdev_get_by_name("ec200x");
+//     netdev_set_status_callback(netdev_4G, netdev_callback_4g);
+// }
+
+// INIT_APP_EXPORT(set_4G_callback);

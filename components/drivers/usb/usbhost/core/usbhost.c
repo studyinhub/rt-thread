@@ -46,6 +46,11 @@ rt_err_t rt_usb_host_init(void)
     rt_usbh_class_driver_register(drv);
 #endif
 
+#ifdef RT_USBH_RNDIS
+    rt_kprintf("rt_usbh_class_driver_register RT_USBH_RNDIS\n");
+    drv = rt_usbh_class_driver_rndis();
+    rt_usbh_class_driver_register(drv);
+#endif
     /* register hub class driver */
     drv = rt_usbh_class_driver_hub();
     rt_usbh_class_driver_register(drv);

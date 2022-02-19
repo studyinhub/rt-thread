@@ -1,4 +1,4 @@
-/**************************************************************************//**
+/**************************************************************************/ /**
 *
 * @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
 *
@@ -9,119 +9,157 @@
 * 2020-12-12      Wayne        First version
 *
 ******************************************************************************/
-
+#include <string.h>
 #include <rtconfig.h>
 #include <rtdevice.h>
-
 #include "drv_sys.h"
-
-#if defined(RT_USING_PIN)
 #include <drv_gpio.h>
 
-/* defined the LED_R pin: PB13 */
-#define LED_R   NU_GET_PININDEX(NU_PA, 7)
+#include "auto_version.h"
 
-/* defined the LED_Y pin: PB8 */
-#define LED_Y   NU_GET_PININDEX(NU_PA, 8)
+#include <netdev_ipaddr.h>
+#include <netdev.h>
 
-#define KEY_1   NU_GET_PININDEX(NU_PB, 7)
+#include "dfs_file.h"
+#include "cJSON.h"
+#include "main.h"
+#include "myWdg.h"
 
+#include "config.h"
+#include "modbus_x.h"
 
-#define LED_1   NU_GET_PININDEX(NU_PD, 8)
+#ifdef LOG_TAG
+#undef LOG_TAG
+#endif
 
-#define LED_2   NU_GET_PININDEX(NU_PD, 9)
+#define LOG_TAG "main"
+#define LOG_LVL LOG_LVL_DBG
+#include <ulog.h>
 
-static uint32_t u32Key1 = KEY_1;
-
-void nu_button_cb(void *args)
+static void idle_hook(void)
 {
-    uint32_t u32Key = *((uint32_t *)(args));
+    /* 在空闲线程的回调函数里喂狗 */
 
-    switch (u32Key)
+    if (wdg_dev != RT_NULL)
     {
-    case KEY_1:
-				rt_kprintf("button click\n");
-        rt_pin_write(LED_Y, ~rt_pin_read(LED_Y));
-        rt_hw_cpu_reset();
-				break;
+        rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_KEEPALIVE, NULL);
     }
 }
 
-#endif
+static int set_date_time()
+{
+    int year, month, day, hour, min, sec;
 
-#if defined(BOARD_USING_UART8_RS485)
+    LOG_I("Init Time with build Time");
+    // 先将实际设置为编译时间，然后通过 NTP 同步
+    // char *token = strtok(BUILDTIME, ".");
+    // year = atoi(token);
 
-#include <drv_uart.h>
-#define NU_UART_DEVNAME "uart8"
+    // token = strtok(NULL, ".");
+    // month = atoi(token);
 
-#endif
+    // token = strtok(NULL, ".");
+    // day = atoi(token);
+
+    // token = strtok(BUILDTIME, ":");
+    // hour = atoi(token);
+
+    // token = strtok(NULL, ":");
+    // min = atoi(token);
+
+    // token = strtok(NULL, ":");
+    // sec = atoi(token);
+
+    if (sscanf(BUILDTIME, "%d.%d.%d %d:%d:%d", &year, &month, &day, &hour, &min, &sec) == 6)
+    {
+        // LOG_D("year:%d,month:%d,day:%d", year, month, day);
+        // LOG_D("hour:%d,min:%d,sec:%d", hour, min, sec);
+    }
+    else
+    {
+        LOG_E("sscanf error");
+    }
+
+    set_time(hour, min, sec);
+    set_date(year, month, day);
+    print_time();
+
+}
+
+#include <netdev.h> /* 包含全部的 netdev 相关操作接口函数 */
+
+struct netdev *netdev_eth = RT_NULL;
+
+void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type)
+{
+    switch (type)
+    {
+    case NETDEV_CB_STATUS_LINK_UP:
+        LOG_I("Ethernet LINK UP");
+        // 
+        init_tftps(WEB_ROOT);
+        //
+        init_webnet(WEB_ROOT);
+        break;
+    case NETDEV_CB_STATUS_LINK_DOWN:
+        LOG_W("Ethernet LINK DOWN");
+        break;
+    default:
+        break;
+    }
+}
 
 int main(int argc, char **argv)
 {
-   rt_err_t ret;
-  int str_len;
-  char txbuf[16];
+    rt_err_t ret;
+    // LOG_I("The current version of APP firmware is %s\n", versionString);
+    sprintf(buildtime,"%s",BUILDTIME);
+    printVersion();
+    set_date_time();
+    
+    load_config();
 
-#if defined(RT_USING_PIN)
+    init_ser_ports();
 
-    /* set LED_R pin mode to output */
-    rt_pin_mode(LED_R, PIN_MODE_OUTPUT);
+    enable_wdt();
 
-    /* set LED_Y pin mode to output */
-    rt_pin_mode(LED_Y, PIN_MODE_OUTPUT);
-	
-		 rt_pin_mode(LED_1, PIN_MODE_OUTPUT);
-		 rt_pin_mode(LED_2, PIN_MODE_OUTPUT);
-	
-		rt_pin_mode(KEY_1, PIN_MODE_INPUT_PULLUP);
-	
-		rt_pin_attach_irq(KEY_1, PIN_IRQ_MODE_FALLING, nu_button_cb, &u32Key1);
-	
-    rt_pin_irq_enable(KEY_1, PIN_IRQ_ENABLE);
-   
-    rt_device_t serial = rt_device_find(NU_UART_DEVNAME);
+    rt_thread_idle_sethook(idle_hook);
 
-    if (!serial)
+    rt_thread_t tid_m_poll = RT_NULL, tid2 = RT_NULL, tid_s_poll = RT_NULL;
+
+    rt_uint32_t level;
+
+    rt_kprintf("This for modbus ASCII <==> RTU\n");
+
+    do
     {
-        rt_kprintf("Can't find %s. EXIT.\n", NU_UART_DEVNAME);
-        goto exit_test_rs485;
-    }
-		
-		rt_kprintf("Find %s.\n", NU_UART_DEVNAME);
-
-    /* Interrupt RX */
-    ret = rt_device_open(serial, RT_DEVICE_FLAG_INT_RX);
-    RT_ASSERT(ret == RT_EOK);
-
-       /* Nuvoton private command */
-    nu_uart_set_rs485aud((struct rt_serial_device *)serial, RT_FALSE);
-
-    rt_snprintf(&txbuf[0], sizeof(txbuf), "Hello World!\r\n");
-    str_len = rt_strlen(txbuf);
+        netdev_eth = netdev_get_by_name("e0");
+        if (netdev_eth)
+        {
+            netdev_set_status_callback(netdev_eth, netdev_callback_eth);
+            break;
+        }
+        else
+        {
+            LOG_W("GET eth netdev failed,retry!");
+            rt_thread_mdelay(1000);
+        }
+    } while (netdev_eth == RT_NULL);
 
     while (1)
     {
-				rt_pin_write(LED_Y, PIN_HIGH);
-        rt_pin_write(LED_R, PIN_HIGH);
-			  rt_pin_write(LED_1, PIN_HIGH);
-			 rt_pin_write(LED_2, PIN_HIGH);
-        rt_thread_mdelay(500);
-			 rt_pin_write(LED_Y, PIN_LOW);
-        rt_pin_write(LED_R, PIN_LOW);
-			rt_pin_write(LED_1, PIN_LOW);
-			rt_pin_write(LED_2, PIN_LOW);
-        rt_thread_mdelay(500);
-
-        /* Say Hello */
-      ret = rt_device_write(serial, 0, &txbuf[0], str_len);
-      RT_ASSERT(ret == str_len);
+        rt_thread_mdelay(1000);
     }
-
-#endif
-
-exit_test_rs485:
-
-    ret = rt_device_close(serial);
-    RT_ASSERT(ret == RT_EOK);
+__exit:
     return 0;
+}
+
+static rt_timer_t oneshort_timer; // on-short
+static rt_bool_t oneshort_timer_flag = RT_FALSE;
+
+static void oneshort_timer_cb(void *parameter)
+{
+
+    LOG_D("one shot timer is timeout");
+    oneshort_timer_flag = RT_TRUE;
 }

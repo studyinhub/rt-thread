@@ -17,6 +17,10 @@ if GetDepend('RT_USBH_MSTORAGE'):
 	src += Glob('class/mass.c')
 	src += Glob('class/udisk.c')
 
+if GetDepend('RT_USBH_RNDIS'):
+	src += Glob('class/rndis_dev.c')
+	src += Glob('class/usbh_rndis.c')
+	
 if GetDepend('RT_USBH_HID'):
 	src += Glob('class/hid.c')
 

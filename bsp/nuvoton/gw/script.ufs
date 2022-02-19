@@ -1,0 +1,4 @@
+format /
+mkdir /webnet/
+cp ::./webnet/index.html /webnet/index.html
+cat /webnet/index.html

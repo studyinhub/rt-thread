@@ -1,0 +1,57 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../../tools/NUC980_NuWriter_CMD"
+		},
+		{
+			"path": "../../../../../C_Projects/uffs"
+		},
+		{
+			"path": "../libraries"
+		},
+		{
+			"path": "../../../../../python_project/pymodbus"
+		}
+	],
+	"settings": {
+		"cortex-debug.armToolchainPath": "/Users/yangxiyuan/Projects/rtt-projects/toolchains/gcc-arm-none-eabi-5_4-2016q3/bin/",
+		"cortex-debug.stm32cubeprogrammer": "/usr/local/bin/st-flash/tools/bin",
+		"files.associations": {
+			"*.html": "html",
+			"drv_gpio.h": "c",
+			"at_log.h": "c",
+			"drv_uart.h": "c",
+			"user_mb_app.h": "c",
+			"watchdog.h": "c",
+			"rtdevice.h": "c",
+			"mywatchdog.h": "c",
+			"rtconfig.h": "c",
+			"easyblink.h": "c",
+			"tftp.h": "c",
+			"webnet.h": "c",
+			"wn_module.h": "c",
+			"main.h": "c",
+			"dfs_file.h": "c",
+			"mnt.h": "c",
+			"mywdg.h": "c",
+			"mywebnet.h": "c",
+			"cjson.h": "c",
+			"ulog.h": "c",
+			"iomanip": "c",
+			"istream": "c",
+			"locale": "c",
+			"*.tcc": "c",
+			"fstream": "c",
+			"iosfwd": "c",
+			"limits": "c",
+			"sstream": "c",
+			"streambuf": "c",
+			"cstdio": "c",
+			"filesystem": "c"
+		},
+		"liveServer.settings.multiRootWorkspaceName": "gw"
+	}
+}

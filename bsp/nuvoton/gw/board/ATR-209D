@@ -1,0 +1,1097 @@
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <errno.h>
+#include <string.h>
+#include <signal.h>
+#include <pthread.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <netinet/in.h> //uint32_t
+#include "cJSON.h"
+
+#define FALSE 0
+#define TRUE 1
+
+#define JsonFileName "/var/www/ATRConfig.json"
+
+int fd[2];
+
+pthread_t threads[10];
+
+static struct termios newtios, oldtios; /*termianal settings */
+static int saved_portfd = -1;			/*serial port fd */
+
+uint8_t Regdate01[64] = {0};
+uint8_t Regdate03[64] = {0};
+uint8_t RTU01_REGaddr[2] = {0};
+uint8_t RTU01_REGlenth[2] = {0};
+uint8_t RTU03_REGaddr[2] = {0};
+uint8_t RTU03_REGlenth[2] = {0};
+
+int REGADDR = 0;
+int MODBUSID = 0;
+
+/*UART Table*/
+typedef struct
+{
+	uint32_t baudrate;
+	uint32_t datalen;
+	uint32_t stopbit;
+	uint32_t odd; //parity  0:non-parity  1:odd parity  2:even parity
+} _UART_PARS_s;
+
+static void reset_tty_atexit(void)
+{
+	if (saved_portfd != -1)
+	{
+		tcsetattr(saved_portfd, TCSANOW, &oldtios);
+	}
+}
+
+/*cheanup signal handler */
+static void reset_tty_handler(int signal)
+{
+	if (saved_portfd != -1)
+	{
+		tcsetattr(saved_portfd, TCSANOW, &oldtios);
+	}
+	_exit(EXIT_FAILURE);
+}
+
+static int open_port(const char *portname, uint32_t baudrate, uint32_t databits, uint32_t parity, uint32_t stopbits, uint8_t vmin, uint8_t vtime)
+{
+	uint32_t speed;
+	struct sigaction sa;
+	int portfd;
+
+	printf("opening serial port:%s\n", portname);
+
+	/*open serial port */
+	if ((portfd = open(portname, O_RDWR | O_NOCTTY | O_NDELAY)) < 0)
+	{
+		printf("open serial port %s fail \n ", portname);
+		return portfd;
+	}
+
+	/*get serial port parnms,save away */
+	tcgetattr(portfd, &newtios);
+	memcpy(&oldtios, &newtios, sizeof newtios);
+
+	switch (baudrate)
+	{
+	case 300:
+		speed = B300;
+		break;
+	case 600:
+		speed = B600;
+		break;
+	case 1200:
+		speed = B1200;
+		break;
+	case 2400:
+		speed = B2400;
+		break;
+	case 4800:
+		speed = B4800;
+		break;
+	case 9600:
+		speed = B9600;
+		break;
+	case 19200:
+		speed = B19200;
+		break;
+	case 38400:
+		speed = B38400;
+		break;
+	case 57600:
+		speed = B57600;
+		break;
+	case 115200:
+		speed = B115200;
+		break;
+	default:
+		printf("Unsupported baudrate \n");
+		return -2;
+	}
+	/* 115200 bps */
+	cfsetospeed(&newtios, speed);
+	cfsetispeed(&newtios, speed);
+
+	switch (databits)
+	{
+	case 8:
+		newtios.c_cflag &= ~CSIZE;
+		newtios.c_cflag |= CS8;
+		break;
+	case 7:
+		newtios.c_cflag &= ~CSIZE;
+		newtios.c_cflag |= CS7;
+		break;
+	case 6:
+		newtios.c_cflag &= ~CSIZE;
+		newtios.c_cflag |= CS6;
+		break;
+	case 5:
+		newtios.c_cflag &= ~CSIZE;
+		newtios.c_cflag |= CS5;
+		break;
+	default:
+		printf("Unsupported data size\n");
+		return -3;
+	}
+
+	switch (parity)
+	{
+	case 0: // non-parity
+		newtios.c_cflag &= ~PARENB;
+		newtios.c_iflag &= ~INPCK;
+		break;
+
+	case 1: // odd-parity
+		newtios.c_cflag |= (PARODD | PARENB);
+		newtios.c_iflag |= (INPCK | ISTRIP);
+		break;
+
+	case 2: // even-parity
+		newtios.c_cflag |= PARENB;
+		newtios.c_cflag &= ~PARODD;
+		newtios.c_iflag |= (INPCK | ISTRIP);
+		break;
+	default:
+		printf("Unsupported parity\n");
+		return -4;
+	}
+
+	// stop-bits
+	switch (stopbits)
+	{
+	case 1:
+		newtios.c_cflag &= ~CSTOPB;
+		break;
+	case 2:
+		newtios.c_cflag |= CSTOPB;
+		break;
+	default:
+		printf("Unsupported stop bits\n");
+		return -5;
+	}
+
+	/* configure new values */
+	//cfmakeraw(&newtios); /*see man page */
+
+	//newtios.c_iflag |=INPCK; /*ignore parity on input */
+	newtios.c_iflag &= ~(IXON | IXOFF | IXANY);
+	newtios.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+	newtios.c_cflag |= CLOCAL | CREAD;
+	newtios.c_oflag &= ~OPOST;
+
+	newtios.c_cc[VMIN] = vmin;	 /* block until 1 char received */
+	newtios.c_cc[VTIME] = vtime; /*no inter-character timer */
+
+	/* register cleanup stuff */
+	saved_portfd = portfd;
+	atexit(reset_tty_atexit);
+	memset(&sa, 0, sizeof sa);
+	sa.sa_handler = reset_tty_handler;
+	sigaction(SIGHUP, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGPIPE, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+
+	/*apply modified termios */
+	tcflush(portfd, TCIOFLUSH);
+	tcsetattr(portfd, TCSANOW, &newtios);
+	return portfd;
+}
+
+static int RTU_open_port(const char *portname)
+{
+	int portfd;
+	int RTUdata = 0;
+	int RTUlenth = 0;
+	FILE *fp = NULL;
+	cJSON *json;
+	char *buf;
+
+	_UART_PARS_s UART_Conf;
+
+	if ((fp = fopen(JsonFileName, "rb")) == NULL)
+	{ //只读方式打开文件
+		printf("openfile error.");
+		return -1;
+	}
+	fseek(fp, 0, SEEK_END); // 确定文件大小, 并将读取指针移回文件开始
+	long pos = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+	if (pos < 0)
+	{
+		printf("invalid file fail");
+		return -1;
+	}
+	buf = malloc(pos + 1); // 根据文件大小申请内存空间,多申请1个字节用于存放'\0'
+	if (buf == NULL)
+	{
+		printf("no enough memory");
+		return -1;
+	}
+	int nread = fread(buf, pos, 1, fp); // 读取文件内容至buff
+	if (!nread)
+	{
+		printf("failed to read file.");
+		fclose(fp); // 关闭文件
+		return -1;
+	}
+	fclose(fp);		 // 关闭文件
+	buf[pos] = '\0'; // 关闭字符串结尾
+
+	//printf("JSON RUN IN:%s\n",buf);
+	json = cJSON_Parse(buf); //获取整个大的句柄
+	if (!json)
+	{
+		printf("JSON format wrong \n");
+		return -1;
+	}
+	//buf=cJSON_Print(json);  //这个是可以输出的。为获取的整个json的值
+	cJSON *arrayItem = cJSON_GetObjectItem(json, "RS485"); //获取这个对象成员
+	//因为这个对象是个数组获取，且只有一个元素所以写下标为0获取
+	cJSON *item = cJSON_GetObjectItem(arrayItem, "Baud");
+	UART_Conf.baudrate = atoi(item->valuestring);
+	printf("Baud:%d \n", UART_Conf.baudrate);
+
+	item = cJSON_GetObjectItem(arrayItem, "Lenth");
+	UART_Conf.datalen = atoi(item->valuestring);
+	printf("Lenth:%d\n", UART_Conf.datalen);
+
+	item = cJSON_GetObjectItem(arrayItem, "Parity");
+	if (*(item->valuestring) == 'N')
+		UART_Conf.odd = 0; //0: non-parity  //1: odd-parity  //2: even-parity
+	if (*(item->valuestring) == 'O')
+		UART_Conf.odd = 1; //0: non-parity  //1: odd-parity  //2: even-parity
+	if (*(item->valuestring) == 'E')
+		UART_Conf.odd = 2; //0: non-parity  //1: odd-parity  //2: even-parity
+	printf("Parity:%d \n", UART_Conf.odd);
+
+	item = cJSON_GetObjectItem(arrayItem, "Stop");
+	UART_Conf.stopbit = atoi(item->valuestring);
+	printf("Stop:%d\n", UART_Conf.stopbit);
+
+	item = cJSON_GetObjectItem(arrayItem, "RTU01addr");
+	RTUdata = atoi(item->valuestring);
+	//printf("PLCaddr:%d\n",PLCdata);
+	RTU01_REGaddr[0] = (RTUdata >> 8) & 0xFF;
+	RTU01_REGaddr[1] = RTUdata & 0xFF;
+	printf("RTU01addr[0]:%d\n", RTU01_REGaddr[0]);
+	printf("RTU01addr[1]:%d\n", RTU01_REGaddr[1]);
+
+	item = cJSON_GetObjectItem(arrayItem, "RTU03addr");
+	RTUdata = atoi(item->valuestring);
+	//printf("PLCaddr:%d\n",PLCdata);
+	RTU03_REGaddr[0] = (RTUdata >> 8) & 0xFF;
+	RTU03_REGaddr[1] = RTUdata & 0xFF;
+	printf("RTU03addr[0]:%d\n", RTU03_REGaddr[0]);
+	printf("RTU03addr[1]:%d\n", RTU03_REGaddr[1]);
+
+	item = cJSON_GetObjectItem(arrayItem, "RTU01lenth");
+	RTUlenth = atoi(item->valuestring);
+	//printf("PLCaddr:%d\n",PLCdata);
+	RTU01_REGlenth[0] = (RTUlenth >> 8) & 0xFF;
+	RTU01_REGlenth[1] = RTUlenth & 0xFF;
+	printf("RTU01lenth[0]:%d\n", RTU01_REGlenth[0]);
+	printf("RTU01lenth[1]:%d\n", RTU01_REGlenth[1]);
+
+	item = cJSON_GetObjectItem(arrayItem, "RTU03lenth");
+	RTUlenth = atoi(item->valuestring);
+	//printf("PLCaddr:%d\n",PLCdata);
+	RTU03_REGlenth[0] = (RTUlenth >> 8) & 0xFF;
+	RTU03_REGlenth[1] = RTUlenth & 0xFF;
+	printf("RTU03lenth[0]:%d\n", RTU03_REGlenth[0]);
+	printf("RTU03lenth[1]:%d\n", RTU03_REGlenth[1]);
+
+	cJSON_Delete(json);
+
+	portfd = open_port(portname, UART_Conf.baudrate, UART_Conf.datalen, UART_Conf.odd, UART_Conf.stopbit, 128, 10);
+	return portfd;
+}
+
+static int ASCII_open_port(const char *portname)
+{
+	int portfd;
+	FILE *fp = NULL;
+	cJSON *json;
+	char *buf;
+
+	_UART_PARS_s UART_Conf;
+
+	if ((fp = fopen(JsonFileName, "rb")) == NULL)
+	{ //只读方式打开文件
+		printf("openfile error.");
+		return -1;
+	}
+	fseek(fp, 0, SEEK_END); // 确定文件大小, 并将读取指针移回文件开始
+	long pos = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+	if (pos < 0)
+	{
+		printf("invalid file fail");
+		return -1;
+	}
+	buf = malloc(pos + 1); // 根据文件大小申请内存空间,多申请1个字节用于存放'\0'
+	if (buf == NULL)
+	{
+		printf("no enough memory");
+		return -1;
+	}
+	int nread = fread(buf, pos, 1, fp); // 读取文件内容至buff
+	if (!nread)
+	{
+		printf("failed to read file.");
+		fclose(fp); // 关闭文件
+		return -1;
+	}
+	fclose(fp);		 // 关闭文件
+	buf[pos] = '\0'; // 关闭字符串结尾
+
+	//printf("JSON RUN IN:%s\n",buf);
+	json = cJSON_Parse(buf); //获取整个大的句柄
+	if (!json)
+	{
+		printf("JSON format wrong \n");
+		return -1;
+	}
+	//buf=cJSON_Print(json);  //这个是可以输出的。为获取的整个json的值
+	cJSON *arrayItem = cJSON_GetObjectItem(json, "RS232"); //获取这个对象成员
+	//因为这个对象是个数组获取，且只有一个元素所以写下标为0获取
+	cJSON *item = cJSON_GetObjectItem(arrayItem, "Baud");
+	UART_Conf.baudrate = atoi(item->valuestring);
+	printf("Baud:%d \n", UART_Conf.baudrate);
+
+	item = cJSON_GetObjectItem(arrayItem, "Lenth");
+	UART_Conf.datalen = atoi(item->valuestring);
+	printf("Lenth:%d\n", UART_Conf.datalen);
+
+	item = cJSON_GetObjectItem(arrayItem, "Parity");
+	if (*(item->valuestring) == 'N')
+		UART_Conf.odd = 0; //0: non-parity  //1: odd-parity  //2: even-parity
+	if (*(item->valuestring) == 'O')
+		UART_Conf.odd = 1; //0: non-parity  //1: odd-parity  //2: even-parity
+	if (*(item->valuestring) == 'E')
+		UART_Conf.odd = 2; //0: non-parity  //1: odd-parity  //2: even-parity
+	printf("Parity:%d \n", UART_Conf.odd);
+
+	item = cJSON_GetObjectItem(arrayItem, "Stop");
+	UART_Conf.stopbit = atoi(item->valuestring);
+	printf("Stop:%d\n", UART_Conf.stopbit);
+
+	item = cJSON_GetObjectItem(arrayItem, "Modbus");
+	MODBUSID = atoi(item->valuestring);
+	printf("MODBUSID:%d\n", MODBUSID);
+
+	item = cJSON_GetObjectItem(arrayItem, "REGaddr");
+	REGADDR = atoi(item->valuestring);
+	printf("REGADDR:%d\n", REGADDR);
+
+	cJSON_Delete(json);
+
+	portfd = open_port(portname, UART_Conf.baudrate, UART_Conf.datalen, UART_Conf.odd, UART_Conf.stopbit, 255, 2);
+
+	return portfd;
+}
+
+static const uint8_t CRCHighTable[] = {
+	0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+	0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+	0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+	0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+	0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+	0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+	0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+	0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+	0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+	0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+	0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+	0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+	0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+	0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+	0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+	0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40};
+
+static const uint8_t CRCLowTable[] = {
+	0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06, 0x07, 0xC7, 0x05, 0xC5, 0xC4, 0x04,
+	0xCC, 0x0C, 0x0D, 0xCD, 0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B, 0xC9, 0x09, 0x08, 0xC8,
+	0xD8, 0x18, 0x19, 0xD9, 0x1B, 0xDB, 0xDA, 0x1A, 0x1E, 0xDE, 0xDF, 0x1F, 0xDD, 0x1D, 0x1C, 0xDC,
+	0x14, 0xD4, 0xD5, 0x15, 0xD7, 0x17, 0x16, 0xD6, 0xD2, 0x12, 0x13, 0xD3, 0x11, 0xD1, 0xD0, 0x10,
+	0xF0, 0x30, 0x31, 0xF1, 0x33, 0xF3, 0xF2, 0x32, 0x36, 0xF6, 0xF7, 0x37, 0xF5, 0x35, 0x34, 0xF4,
+	0x3C, 0xFC, 0xFD, 0x3D, 0xFF, 0x3F, 0x3E, 0xFE, 0xFA, 0x3A, 0x3B, 0xFB, 0x39, 0xF9, 0xF8, 0x38,
+	0x28, 0xE8, 0xE9, 0x29, 0xEB, 0x2B, 0x2A, 0xEA, 0xEE, 0x2E, 0x2F, 0xEF, 0x2D, 0xED, 0xEC, 0x2C,
+	0xE4, 0x24, 0x25, 0xE5, 0x27, 0xE7, 0xE6, 0x26, 0x22, 0xE2, 0xE3, 0x23, 0xE1, 0x21, 0x20, 0xE0,
+	0xA0, 0x60, 0x61, 0xA1, 0x63, 0xA3, 0xA2, 0x62, 0x66, 0xA6, 0xA7, 0x67, 0xA5, 0x65, 0x64, 0xA4,
+	0x6C, 0xAC, 0xAD, 0x6D, 0xAF, 0x6F, 0x6E, 0xAE, 0xAA, 0x6A, 0x6B, 0xAB, 0x69, 0xA9, 0xA8, 0x68,
+	0x78, 0xB8, 0xB9, 0x79, 0xBB, 0x7B, 0x7A, 0xBA, 0xBE, 0x7E, 0x7F, 0xBF, 0x7D, 0xBD, 0xBC, 0x7C,
+	0xB4, 0x74, 0x75, 0xB5, 0x77, 0xB7, 0xB6, 0x76, 0x72, 0xB2, 0xB3, 0x73, 0xB1, 0x71, 0x70, 0xB0,
+	0x50, 0x90, 0x91, 0x51, 0x93, 0x53, 0x52, 0x92, 0x96, 0x56, 0x57, 0x97, 0x55, 0x95, 0x94, 0x54,
+	0x9C, 0x5C, 0x5D, 0x9D, 0x5F, 0x9F, 0x9E, 0x5E, 0x5A, 0x9A, 0x9B, 0x5B, 0x99, 0x59, 0x58, 0x98,
+	0x88, 0x48, 0x49, 0x89, 0x4B, 0x8B, 0x8A, 0x4A, 0x4E, 0x8E, 0x8F, 0x4F, 0x8D, 0x4D, 0x4C, 0x8C,
+	0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42, 0x43, 0x83, 0x41, 0x81, 0x80, 0x40};
+
+/*****************************************************************************************************/
+int ModbusCRC(uint8_t *str, uint32_t len)
+{
+	uint8_t temp;
+	uint8_t g_lowCrcbyte = 0xFF;
+	uint8_t g_highCrcbyte = 0xFF;
+
+	while (len--)
+	{
+		temp = *str++ ^ g_lowCrcbyte;
+		g_lowCrcbyte = CRCHighTable[temp] ^ g_highCrcbyte;
+		g_highCrcbyte = CRCLowTable[temp];
+	}
+	return (g_highCrcbyte * 0x100 + g_lowCrcbyte);
+}
+
+/*
+char GetCheckCode(const char * pSendBuf, int nEnd)//获得校验码 
+{ 
+	char byLrc = 0; char pBuf[4]; int nData = 0; 
+	for(int i=1; i<nEnd; i+=2) //i初始为1，避开“开始标记”冒号 
+	{ 
+	//每两个需要发送的ASCII码转化为一个十六进制数 
+	pBuf [0] = pSendBuf [i]; pBuf [1] = pSendBuf [i+1]; 
+	pBuf [2] = '\0'; 
+	sscanf(pBuf,"%x",& nData); //将pbuf值输入到nData 
+	byLrc += nData; 
+	} 
+	byLrc = ~ byLrc; 
+	byLrc ++; 
+	return byLrc; 
+}
+*/
+
+void *process1(void *arg)
+{
+
+	int rev = 0;
+	int CRCdata = 0;
+	char TempH = 0;
+	char TempL = 0;
+	char ASCII_RxBuffer[256];
+	char ASCII_TxBuffer[256];
+
+	while (1)
+	{
+		rev = 0;
+		memset(ASCII_RxBuffer, 0, 256);
+		rev = read(fd[0], ASCII_RxBuffer, 256);
+		//if(rev>0)
+		//{
+		//  printf("\n uart7 rev %d %s byts\n ", rev, ASCII_RxBuffer);
+		//  write(fd[0],ASCII_RxBuffer,rev);
+		//}
+		if ((rev >= 3) && (ASCII_RxBuffer[0] == 0x0A))
+		{
+			//printf("\n uart7 rev %d %x byts\n ", rev1, ASCII_RxBuffer);
+			//write(fd[0],ASCII_RxBuffer,rev);
+			switch (ASCII_RxBuffer[1])
+			{
+			case 'R':
+				ASCII_TxBuffer[0] = 0x0A;
+				ASCII_TxBuffer[1] = 'R';
+				ASCII_TxBuffer[2] = 0x20;
+
+				//Regdate01[0] (1--8) ControlFlags: Bit encoded Byte (2 chars)
+				if (((Regdate01[0] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[3] = ((Regdate01[0] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[3] = ((Regdate01[0] >> 4) & 0X0F) + 0x30;
+				if ((Regdate01[0] & 0x0F) > 0x09)
+					ASCII_TxBuffer[4] = (Regdate01[0] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[4] = (Regdate01[0] & 0x0F) + 0x30;
+				ASCII_TxBuffer[5] = 0x20;
+
+				//Regdate01[1] (9--16) AlarmFlags: Bit encoded Byte (2 chars)
+				if (((Regdate01[1] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[6] = ((Regdate01[1] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[6] = ((Regdate01[1] >> 4) & 0X0F) + 0x30;
+				if ((Regdate01[1] & 0x0F) > 0x09)
+					ASCII_TxBuffer[7] = (Regdate01[1] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[7] = (Regdate01[1] & 0x0F) + 0x30;
+				ASCII_TxBuffer[8] = 0x20;
+
+				//Regdate03[0-1] regaddr(1) PlantTemp:Encoded (2-byte hex(4 chars) (°Cx100))
+				if (((Regdate03[0] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[9] = ((Regdate03[0] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[9] = ((Regdate03[0] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[0] & 0x0F) > 0x09)
+					ASCII_TxBuffer[10] = (Regdate03[0] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[10] = (Regdate03[0] & 0x0F) + 0x30;
+				if (((Regdate03[1] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[11] = ((Regdate03[1] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[11] = ((Regdate03[1] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[1] & 0x0F) > 0x09)
+					ASCII_TxBuffer[12] = (Regdate03[1] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[12] = (Regdate03[1] & 0x0F) + 0x30;
+				ASCII_TxBuffer[13] = 0x20;
+
+				//Regdate03[2-3] regaddr(2) SetTemp:Encoded (2-byte hex (4 chars) (°Cx100))
+				if (((Regdate03[2] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[14] = ((Regdate03[2] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[14] = ((Regdate03[2] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[2] & 0x0F) > 0x09)
+					ASCII_TxBuffer[15] = (Regdate01[2] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[15] = (Regdate03[2] & 0x0F) + 0x30;
+				if (((Regdate03[3] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[16] = ((Regdate03[3] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[16] = ((Regdate03[3] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[3] & 0x0F) > 0x09)
+					ASCII_TxBuffer[17] = (Regdate03[3] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[17] = (Regdate03[3] & 0x0F) + 0x30;
+				ASCII_TxBuffer[18] = 0x20;
+
+				//Regdate03[4-5] regaddr(3) Pressure:Encoded is integer value (1-byte hex (2 chars))
+				if (((Regdate03[5] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[19] = ((Regdate03[5] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[19] = ((Regdate03[5] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[5] & 0x0F) > 0x09)
+					ASCII_TxBuffer[20] = (Regdate03[5] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[20] = (Regdate03[5] & 0x0F) + 0x30;
+
+				ASCII_TxBuffer[21] = 0X0D;
+				write(fd[0], ASCII_TxBuffer, 22);
+				break;
+			case 'T':
+				//Regdate03[0-1] regaddr(1) PlantTemp:Encoded (2-byte hex(4 chars) (°Cx100))
+				ASCII_TxBuffer[0] = 0x0A;
+				ASCII_TxBuffer[1] = 'T';
+				ASCII_TxBuffer[2] = 0x20;
+
+				if (((Regdate03[0] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[3] = ((Regdate03[0] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[3] = ((Regdate03[0] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[0] & 0x0F) > 0x09)
+					ASCII_TxBuffer[4] = (Regdate03[0] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[4] = (Regdate03[0] & 0x0F) + 0x30;
+				if (((Regdate03[1] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[5] = ((Regdate03[1] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[5] = ((Regdate03[1] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[1] & 0x0F) > 0x09)
+					ASCII_TxBuffer[6] = (Regdate03[1] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[6] = (Regdate03[1] & 0x0F) + 0x30;
+
+				ASCII_TxBuffer[7] = 0X0D;
+				write(fd[0], ASCII_TxBuffer, 8);
+				break;
+
+			case 'S':
+				//Regdate03[2-3] regaddr(2) SetTemp:Encoded (2-byte hex (4 chars) (°Cx100))
+				ASCII_TxBuffer[0] = 0x0A;
+				ASCII_TxBuffer[1] = 'S';
+				ASCII_TxBuffer[2] = 0x20;
+
+				if (((Regdate03[2] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[3] = ((Regdate03[2] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[3] = ((Regdate03[2] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[2] & 0x0F) > 0x09)
+					ASCII_TxBuffer[4] = (Regdate01[2] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[4] = (Regdate03[2] & 0x0F) + 0x30;
+				if (((Regdate03[3] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[5] = ((Regdate03[3] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[5] = ((Regdate03[3] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[3] & 0x0F) > 0x09)
+					ASCII_TxBuffer[6] = (Regdate03[3] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[6] = (Regdate03[3] & 0x0F) + 0x30;
+
+				ASCII_TxBuffer[7] = 0x0D;
+				write(fd[0], ASCII_TxBuffer, 8);
+				break;
+
+			case 'U':
+				//Regdate01[2] (17--24) UserControlFlags: Bit encoded Byte (2 chars)
+				ASCII_TxBuffer[0] = 0x0A;
+				ASCII_TxBuffer[1] = 'U';
+				ASCII_TxBuffer[2] = 0x20;
+
+				if (((Regdate01[2] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[3] = ((Regdate01[2] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[3] = ((Regdate01[2] >> 4) & 0X0F) + 0x30;
+				if ((Regdate01[2] & 0x0F) > 0x09)
+					ASCII_TxBuffer[4] = (Regdate01[2] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[4] = (Regdate01[2] & 0x0F) + 0x30;
+				ASCII_TxBuffer[5] = 0x20;
+
+				//Regdate03[6-7] regaddr(4) OverTempAlmLmt:High Temp Limit Setpoint (2-byte hex (4 chars) (°Cx100))
+				if (((Regdate03[6] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[6] = ((Regdate03[6] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[6] = ((Regdate03[6] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[6] & 0x0F) > 0x09)
+					ASCII_TxBuffer[7] = (Regdate03[6] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[7] = (Regdate03[6] & 0x0F) + 0x30;
+				if (((Regdate03[7] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[8] = ((Regdate03[7] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[8] = ((Regdate03[7] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[7] & 0x0F) > 0x09)
+					ASCII_TxBuffer[9] = (Regdate03[7] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[9] = (Regdate03[7] & 0x0F) + 0x30;
+				ASCII_TxBuffer[10] = 0x20;
+
+				//Regdate03[8-9] regaddr(5) LowTempAlmLmt:  Low Temp Limit Setpoint (2-byte hex (4 chars) (°Cx100))
+				if (((Regdate03[8] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[11] = ((Regdate03[8] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[11] = ((Regdate03[8] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[8] & 0x0F) > 0x09)
+					ASCII_TxBuffer[12] = (Regdate01[8] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[12] = (Regdate03[8] & 0x0F) + 0x30;
+				if (((Regdate03[9] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[13] = ((Regdate03[9] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[13] = ((Regdate03[9] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[9] & 0x0F) > 0x09)
+					ASCII_TxBuffer[14] = (Regdate03[9] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[14] = (Regdate03[9] & 0x0F) + 0x30;
+				ASCII_TxBuffer[15] = 0x20;
+				//Regdate03[10-11] regaddr(6) OffsetCal:Plant Temp Offset (2-byte hex (4 chars) (°Cx100))
+				if (((Regdate03[10] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[16] = ((Regdate03[10] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[16] = ((Regdate03[10] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[10] & 0x0F) > 0x09)
+					ASCII_TxBuffer[17] = (Regdate01[10] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[17] = (Regdate03[10] & 0x0F) + 0x30;
+				if (((Regdate03[11] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[18] = ((Regdate03[11] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[18] = ((Regdate03[11] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[11] & 0x0F) > 0x09)
+					ASCII_TxBuffer[19] = (Regdate03[11] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[19] = (Regdate03[11] & 0x0F) + 0x30;
+
+				ASCII_TxBuffer[20] = 0X0D;
+				write(fd[0], ASCII_TxBuffer, 21);
+
+				break;
+			case 'P':
+				//Regdate03[2-3] regaddr(2) SetTemp: Setpoint Temperature Value (2-byte hex (4 chars) (°Cx100))
+				write(fd[0], "\n\r", 2);
+				ASCII_TxBuffer[0] = MODBUSID & 0xFF;
+				ASCII_TxBuffer[1] = 0x06;
+				ASCII_TxBuffer[2] = 0x00;
+				ASCII_TxBuffer[3] = 0x02;
+				if (ASCII_RxBuffer[2] > '9')
+					TempH = ASCII_RxBuffer[2] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[2] - 0x30;
+				if (ASCII_RxBuffer[3] > '9')
+					TempL = ASCII_RxBuffer[3] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[3] - 0x30;
+				ASCII_TxBuffer[4] = TempH * 16 + TempL;
+
+				if (ASCII_RxBuffer[4] > '9')
+					TempH = ASCII_RxBuffer[4] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[4] - 0x30;
+				if (ASCII_RxBuffer[5] > '9')
+					TempL = ASCII_RxBuffer[5] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[5] - 0x30;
+				ASCII_TxBuffer[5] = TempH * 16 + TempL;
+				CRCdata = ModbusCRC(ASCII_TxBuffer, 6);
+				ASCII_TxBuffer[6] = CRCdata & 0xFF;
+				ASCII_TxBuffer[7] = (CRCdata >> 8) & 0xFF;
+				write(fd[1], ASCII_TxBuffer, 8);
+				break;
+			case 'X':
+				//Regdate03[6-7] regaddr(4) OverTempAlmLmt: High Temp Limit Setpoint  (2-byte hex (4 chars) (°Cx100))
+				write(fd[0], "\n\r", 2);
+				ASCII_TxBuffer[0] = MODBUSID & 0xFF;
+				ASCII_TxBuffer[1] = 0x06;
+				ASCII_TxBuffer[2] = 0x00;
+				ASCII_TxBuffer[3] = 0x04;
+				if (ASCII_RxBuffer[2] > '9')
+					TempH = ASCII_RxBuffer[2] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[2] - 0x30;
+				if (ASCII_RxBuffer[3] > '9')
+					TempL = ASCII_RxBuffer[3] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[3] - 0x30;
+				ASCII_TxBuffer[4] = TempH * 16 + TempL;
+
+				if (ASCII_RxBuffer[4] > '9')
+					TempH = ASCII_RxBuffer[4] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[4] - 0x30;
+				if (ASCII_RxBuffer[5] > '9')
+					TempL = ASCII_RxBuffer[5] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[5] - 0x30;
+				ASCII_TxBuffer[5] = TempH * 16 + TempL;
+				CRCdata = ModbusCRC(ASCII_TxBuffer, 6);
+				ASCII_TxBuffer[6] = CRCdata & 0xFF;
+				ASCII_TxBuffer[7] = (CRCdata >> 8) & 0xFF;
+				write(fd[1], ASCII_TxBuffer, 8);
+				break;
+			case 'Y':
+				//Regdate03[8-9] regaddr(5) LowTempAlmLmt: Low Temp Limit Setpoint (2-byte hex (4 chars) (°Cx100))
+				write(fd[0], "\n\r", 2);
+				ASCII_TxBuffer[0] = MODBUSID & 0xFF;
+				ASCII_TxBuffer[1] = 0x06;
+				ASCII_TxBuffer[2] = 0x00;
+				ASCII_TxBuffer[3] = 0x05;
+				if (ASCII_RxBuffer[2] > '9')
+					TempH = ASCII_RxBuffer[2] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[2] - 0x30;
+				if (ASCII_RxBuffer[3] > '9')
+					TempL = ASCII_RxBuffer[3] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[3] - 0x30;
+				ASCII_TxBuffer[4] = TempH * 16 + TempL;
+
+				if (ASCII_RxBuffer[4] > '9')
+					TempH = ASCII_RxBuffer[4] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[4] - 0x30;
+				if (ASCII_RxBuffer[5] > '9')
+					TempL = ASCII_RxBuffer[5] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[5] - 0x30;
+				ASCII_TxBuffer[5] = TempH * 16 + TempL;
+				CRCdata = ModbusCRC(ASCII_TxBuffer, 6);
+				ASCII_TxBuffer[6] = CRCdata & 0xFF;
+				ASCII_TxBuffer[7] = (CRCdata >> 8) & 0xFF;
+				write(fd[1], ASCII_TxBuffer, 8);
+				break;
+			case 'Z':
+				//Regdate03[10-11] regaddr(6) OffsetCal:Plant Temp Offset (2-byte hex (4 chars) (°Cx100))
+				write(fd[0], "\n\r", 2);
+				ASCII_TxBuffer[0] = MODBUSID & 0xFF;
+				ASCII_TxBuffer[1] = 0x06;
+				ASCII_TxBuffer[2] = 0x00;
+				ASCII_TxBuffer[3] = 0x06;
+				if (ASCII_RxBuffer[2] > '9')
+					TempH = ASCII_RxBuffer[2] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[2] - 0x30;
+				if (ASCII_RxBuffer[3] > '9')
+					TempL = ASCII_RxBuffer[3] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[3] - 0x30;
+				ASCII_TxBuffer[4] = TempH * 16 + TempL;
+
+				if (ASCII_RxBuffer[4] > '9')
+					TempH = ASCII_RxBuffer[4] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[4] - 0x30;
+				if (ASCII_RxBuffer[5] > '9')
+					TempL = ASCII_RxBuffer[5] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[5] - 0x30;
+				ASCII_TxBuffer[5] = TempH * 16 + TempL;
+				CRCdata = ModbusCRC(ASCII_TxBuffer, 6);
+				ASCII_TxBuffer[6] = CRCdata & 0xFF;
+				ASCII_TxBuffer[7] = (CRCdata >> 8) & 0xFF;
+				write(fd[1], ASCII_TxBuffer, 8);
+				break;
+
+			case 'W':
+				//Regdate01[2] (17--25) UserControlFlags: Bit encoded Byte (2 chars)
+
+				write(fd[0], "\n\r", 2);
+				ASCII_TxBuffer[0] = MODBUSID & 0xFF;
+				ASCII_TxBuffer[1] = 0x0F;
+				ASCII_TxBuffer[2] = 0x00;
+				ASCII_TxBuffer[3] = 0x11;
+				ASCII_TxBuffer[4] = 0x00;
+				ASCII_TxBuffer[5] = 0x08;
+				ASCII_TxBuffer[6] = 0x01;
+				if (ASCII_RxBuffer[2] > '9')
+					TempH = ASCII_RxBuffer[2] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[2] - 0x30;
+				if (ASCII_RxBuffer[3] > '9')
+					TempL = ASCII_RxBuffer[3] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[3] - 0x30;
+				ASCII_TxBuffer[7] = TempH * 16 + TempL;
+				CRCdata = ModbusCRC(ASCII_TxBuffer, 8);
+				ASCII_TxBuffer[8] = CRCdata & 0xFF;
+				ASCII_TxBuffer[9] = (CRCdata >> 8) & 0xFF;
+				write(fd[1], ASCII_TxBuffer, 10);
+				break;
+			case 'M':
+				//Regdate01[3] (25--32) UserControlFlags: Bit encoded Byte (2 chars)
+				ASCII_TxBuffer[0] = 0x0A;
+				ASCII_TxBuffer[1] = 'M';
+				ASCII_TxBuffer[2] = 0x20;
+
+				if (((Regdate01[3] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[3] = ((Regdate01[3] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[3] = ((Regdate01[3] >> 4) & 0X0F) + 0x30;
+				if ((Regdate01[3] & 0x0F) > 0x09)
+					ASCII_TxBuffer[4] = (Regdate01[3] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[4] = (Regdate01[3] & 0x0F) + 0x30;
+				ASCII_TxBuffer[5] = 0x20;
+
+				//Regdate01[4] (33--40) UserControlFlags: Bit encoded Byte (2 chars)
+				if (((Regdate01[4] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[6] = ((Regdate01[4] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[6] = ((Regdate01[4] >> 4) & 0X0F) + 0x30;
+				if ((Regdate01[4] & 0x0F) > 0x09)
+					ASCII_TxBuffer[7] = (Regdate01[4] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[7] = (Regdate01[4] & 0x0F) + 0x30;
+				ASCII_TxBuffer[8] = 0x20;
+
+				//Regdate03[12-13] regaddr(7) OffsetCal:Plant Temp Offset (2-byte hex (4 chars) (°Cx100))
+				if (((Regdate03[12] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[9] = ((Regdate03[12] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[9] = ((Regdate03[12] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[12] & 0x0F) > 0x09)
+					ASCII_TxBuffer[10] = (Regdate01[12] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[10] = (Regdate03[12] & 0x0F) + 0x30;
+				if (((Regdate03[13] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[11] = ((Regdate03[13] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[11] = ((Regdate03[13] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[13] & 0x0F) > 0x09)
+					ASCII_TxBuffer[12] = (Regdate03[13] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[12] = (Regdate03[13] & 0x0F) + 0x30;
+				ASCII_TxBuffer[13] = 0x20;
+
+				//Regdate03[14-15] regaddr(8) OffsetCal:Plant Temp Offset (2-byte hex (4 chars) (°Cx100))
+				if (((Regdate03[14] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[14] = ((Regdate03[14] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[14] = ((Regdate03[14] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[14] & 0x0F) > 0x09)
+					ASCII_TxBuffer[15] = (Regdate01[14] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[15] = (Regdate03[14] & 0x0F) + 0x30;
+				if (((Regdate03[15] >> 4) & 0X0F) > 9)
+					ASCII_TxBuffer[16] = ((Regdate03[15] >> 4) & 0X0F) + 0x37;
+				else
+					ASCII_TxBuffer[16] = ((Regdate03[15] >> 4) & 0X0F) + 0x30;
+				if ((Regdate03[15] & 0x0F) > 0x09)
+					ASCII_TxBuffer[17] = (Regdate03[15] & 0x0F) + 0x37;
+				else
+					ASCII_TxBuffer[17] = (Regdate03[15] & 0x0F) + 0x30;
+
+				ASCII_TxBuffer[18] = 0X0D;
+				write(fd[0], ASCII_TxBuffer, 19);
+				break;
+
+			case 'N':
+				//Regdate01[4-5] (25--40) UserControlFlags: Bit encoded Byte (4 chars)
+
+				write(fd[0], "\n\r", 2);
+				ASCII_TxBuffer[0] = MODBUSID & 0xFF;
+				ASCII_TxBuffer[1] = 0x10;
+				ASCII_TxBuffer[2] = 0x00;
+				ASCII_TxBuffer[3] = 0x19;
+				ASCII_TxBuffer[4] = 0x00;
+				ASCII_TxBuffer[5] = 0x02;
+				ASCII_TxBuffer[6] = 0x04;
+				if (ASCII_RxBuffer[2] > '9')
+					TempH = ASCII_RxBuffer[2] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[2] - 0x30;
+				if (ASCII_RxBuffer[3] > '9')
+					TempL = ASCII_RxBuffer[3] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[3] - 0x30;
+				ASCII_TxBuffer[7] = TempH * 16 + TempL;
+
+				if (ASCII_RxBuffer[4] > '9')
+					TempH = ASCII_RxBuffer[4] - 0x37;
+				else
+					TempH = ASCII_RxBuffer[4] - 0x30;
+				if (ASCII_RxBuffer[5] > '9')
+					TempL = ASCII_RxBuffer[5] - 0x37;
+				else
+					TempL = ASCII_RxBuffer[5] - 0x30;
+				ASCII_TxBuffer[8] = TempH * 16 + TempL;
+
+				CRCdata = ModbusCRC(ASCII_TxBuffer, 9);
+				ASCII_TxBuffer[9] = CRCdata & 0xFF;
+				ASCII_TxBuffer[10] = (CRCdata >> 8) & 0xFF;
+				write(fd[1], ASCII_TxBuffer, 11);
+				break;
+			default:
+				write(fd[0], "Read Data Error \n\r", 18);
+				break;
+			}
+		}
+		else if (rev > 0)
+			write(fd[0], "Send Data Error \n\r", 18);
+		usleep(1000);
+	}
+}
+
+void *process2(void *arg)
+{
+	int CRCdata = 0;
+	int rev1 = 0;
+	int i = 0;
+	int nub = 1;
+	char RxBuffer[256];
+
+	char RTU03_TxBuffer[8] = {0x01, 0x03, 0, 0, 0, 0x08, 0x44, 0x06};
+	char RTU01_TxBuffer[8] = {0x01, 0x01, 0, 0, 0, 0x28, 0x44, 0x06};
+
+	RTU01_TxBuffer[0] = MODBUSID & 0xFF;
+	RTU01_TxBuffer[2] = RTU01_REGaddr[0];
+	RTU01_TxBuffer[3] = RTU01_REGaddr[1];
+	RTU01_TxBuffer[4] = RTU01_REGlenth[0];
+	RTU01_TxBuffer[5] = RTU01_REGlenth[1];
+	CRCdata = ModbusCRC(RTU01_TxBuffer, 6);
+	RTU01_TxBuffer[6] = CRCdata & 0xFF;
+	RTU01_TxBuffer[7] = (CRCdata >> 8) & 0xFF;
+
+	RTU03_TxBuffer[0] = MODBUSID & 0xFF;
+	RTU03_TxBuffer[2] = RTU03_REGaddr[0];
+	RTU03_TxBuffer[3] = RTU03_REGaddr[1];
+	RTU03_TxBuffer[4] = RTU03_REGlenth[0];
+	RTU03_TxBuffer[5] = RTU03_REGlenth[1];
+	CRCdata = ModbusCRC(RTU03_TxBuffer, 6);
+	RTU03_TxBuffer[6] = CRCdata & 0xFF;
+	RTU03_TxBuffer[7] = (CRCdata >> 8) & 0xFF;
+
+	//printf("RTU_TxBuffer UP %s byts \n ",RTU_TxBuffer);
+
+	while (1)
+	{
+		if (nub == 3)
+		{
+			write(fd[1], RTU03_TxBuffer, 8);
+			//printf("\n uart7 send RTU03 %s byts\n ", RTU03_TxBuffer);
+			nub = 1;
+		}
+		else if (nub == 1)
+		{
+			write(fd[1], RTU01_TxBuffer, 8);
+			//printf("\n uart7 send RTU01 %s byts\n ", RTU01_TxBuffer);
+			nub = 3;
+		}
+		usleep(1000);
+		rev1 = read(fd[1], RxBuffer, 256);
+		if (rev1 > 0)
+		{
+			//printf("\n uart9 rev %d %x byts\n ", rev1,RxBuffer);
+
+			if ((RxBuffer[0] == (MODBUSID & 0xFF)) && (RxBuffer[1] == 0x03))
+			{
+				for (i = 0; i < RxBuffer[2]; i++)
+				{
+					Regdate03[i] = RxBuffer[i + 3];
+				}
+			}
+			if ((RxBuffer[0] == (MODBUSID & 0xFF)) && (RxBuffer[1] == 0x01))
+			{
+				for (i = 0; i < RxBuffer[2]; i++)
+				{
+					Regdate01[i] = RxBuffer[i + 3];
+				}
+			}
+			memset(RxBuffer, 0, 256);
+			sleep(1);
+		}
+		sleep(3);
+		//printf("RTU_TxBuffer %X byts\n ",RTU_TxBuffer);
+	}
+}
+
+int main(int argc, char **argv)
+{
+	char *dev[10] = {"/dev/ttyS4", "/dev/ttyS7"};
+	uint32_t i = 0;
+
+	printf("RTU-ASCII test function .\n");
+
+	/*
+	//控制GPIO开机
+	fd1 =  open("/dev/qgpio", O_RDWR);
+        if (fd1 == -1) {
+                printf("Cannot open qgpio\n");
+                return -1;
+        }
+	printf("GET_REQ NUC980_PD14,%d\n",ioctl(fd1,GET_REQ,NUC980_PD14));
+
+	ioctl(fd1,SET_OUTPUT,NUC980_PD14);
+	ioctl(fd1,SET_HIGH,NUC980_PD14);
+	sleep(1);
+	ioctl(fd1,SET_LOW,NUC980_PD14);
+*/
+
+	if ((fd[0] = ASCII_open_port(dev[0])) < 0)
+		return -1;
+	printf("Set UART4 RS-232 OK \n");
+	i = write(fd[0], "RS-232 someting uart4 send\n", 26);
+	if (i == 26)
+		printf("uart4 send ok \n");
+	else
+		printf("uart4 send error \n");
+
+	if ((fd[1] = RTU_open_port(dev[1])) < 0)
+		return -1;
+	printf("Set RTU UART7 RS-485 OK \n");
+	i = write(fd[1], "RTU someting uart7 send\n", 24);
+	if (i == 24)
+		printf("uart7 send ok \n");
+	else
+		printf("uart7 send error \n");
+
+	//为了测试模块各个功能，本程序没有实现命令逻辑，而是直接将UART1和UART2软接，方便使用上位机测试。详情参看用户手册
+	pthread_create(&threads[0], NULL, process1, (void *)(fd[0]));
+	pthread_create(&threads[1], NULL, process2, (void *)(fd[1]));
+
+	printf("dvice run ok \n");
+
+	pthread_join(threads[0], NULL);
+	pthread_join(threads[1], NULL);
+
+	return 0;
+}

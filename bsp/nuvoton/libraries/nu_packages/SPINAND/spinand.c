@@ -17,7 +17,7 @@
 #define LOG_TAG                 "spinand_flash"
 #define DBG_ENABLE
 #define DBG_SECTION_NAME        LOG_TAG
-#define DBG_LEVEL               DBG_INFO
+#define DBG_LEVEL               DBG_LOG
 #define DBG_COLOR
 #include <rtdbg.h>
 
@@ -679,8 +679,10 @@ static rt_err_t spinand_info_read(struct rt_qspi_device *qspi)
             default:
                 goto exit_spinand_info_read;
             }
-
             return RT_EOK;
+        }else
+        {
+            LOG_E("Not found SPI NAND");
         }
     }
 

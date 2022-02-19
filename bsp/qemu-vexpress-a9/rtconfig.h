@@ -232,50 +232,7 @@
 
 #define RT_USING_LWP
 
-/* RT-Thread online packages */
-
-/* IoT - internet of things */
-
-
-/* Wi-Fi */
-
-/* Marvell WiFi */
-
-
-/* Wiced WiFi */
-
-
-/* IoT Cloud */
-
-
-/* security packages */
-
-
-/* language packages */
-
-
-/* multimedia packages */
-
-
-/* tools packages */
-
-
-/* system packages */
-
-
-/* Micrium: Micrium software products porting for RT-Thread */
-
-
-/* peripheral libraries and drivers */
-
-
-/* miscellaneous packages */
-
-
-/* samples: kernel and components samples */
-
-
-/* games: games run on RT-Thread console */
+/* RT-Thread Utestcases */
 
 #define SOC_VEXPRESS_A9
 #define RT_USING_UART0

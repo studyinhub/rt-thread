@@ -86,8 +86,8 @@
 /*----------------------------------------------------------------------------------------*/
 /*   Debug settings                                                                       */
 /*----------------------------------------------------------------------------------------*/
-#define ENABLE_ERROR_MSG                    /* enable debug messages                      */
-//#define ENABLE_DEBUG_MSG                    /* enable debug messages                      */
+//#define ENABLE_ERROR_MSG                    /* enable debug messages                      */
+#define ENABLE_DEBUG_MSG                    /* enable debug messages                      */
 //#define ENABLE_VERBOSE_DEBUG              /* verbos debug messages                      */
 //#define DUMP_DESCRIPTOR                   /* dump descriptors                           */
 

@@ -628,6 +628,14 @@ menu "Using USB"
                     string "Udisk mount dir"
                     default "/"
                 endif
+	    config RT_USBH_RNDIS
+	    	bool "Enable rndis"
+		default n
+		if RT_USBH_RNDIS
+		   config RT_USBH_RNDIS_DEV
+		   bool "dev"
+		   default n
+		endif
             config RT_USBH_HID
                 bool "Enable HID Drivers"
                 default n

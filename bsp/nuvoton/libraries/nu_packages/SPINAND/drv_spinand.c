@@ -17,7 +17,7 @@
 #define LOG_TAG                 "drv_spinand"
 #define DBG_ENABLE
 #define DBG_SECTION_NAME        LOG_TAG
-#define DBG_LEVEL               DBG_INFO
+#define DBG_LEVEL               DBG_LOG
 #define DBG_COLOR
 #include <rtdbg.h>
 
@@ -190,7 +190,7 @@ static rt_err_t spinand_read_page(struct rt_mtd_nand_device *device,
 {
     rt_err_t result = RT_EOK ;
 
-    LOG_D("[R-%d]data: 0x%08x %d, spare: 0x%08x, %d", page, data, data_len, spare, spare_len);
+    //LOG_D("[R-%d]data: 0x%08x %d, spare: 0x%08x, %d", page, data, data_len, spare, spare_len);
 
     RT_ASSERT(device != RT_NULL);
 
@@ -228,8 +228,8 @@ exit_spinand_read_page:
 
     rt_mutex_release(SPINAND_FLASH_LOCK);
 
-    spinand_dump_buffer(page, data, data_len, "Read Data");
-    spinand_dump_buffer(page, spare, spare_len, "Read Spare");
+    //spinand_dump_buffer(page, data, data_len, "Read Data");
+    //spinand_dump_buffer(page, spare, spare_len, "Read Spare");
 
     return result;
 }

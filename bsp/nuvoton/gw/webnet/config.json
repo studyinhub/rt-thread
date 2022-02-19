@@ -1,0 +1,46 @@
+{
+    "lastConfitAt": "2022-02-17 17:00:00",
+    "mode":0,
+    "masterID": 1,
+    "querys":[
+        {
+            "id":1,
+            "cmd":3,
+            "start":0,
+            "cnt":10
+        },
+        {
+            "id":2,
+            "cmd":3,
+            "start":0,
+            "cnt":10
+        }
+    ],
+    "baudrates":["2400","4800","9600","19200","38400","57600","115200"],
+    "ports":[
+        {
+            "name":"uart1",
+            "baud_rate":115200,
+            "data_bits":8,
+            "stop_bits":1,
+            "bufsz":2048,
+            "parity":0
+        },
+        {
+            "name":"uart6",
+            "baud_rate":57600,
+            "data_bits":8,
+            "stop_bits":1,
+            "bufsz":1048,
+            "parity":0
+        },
+        {
+            "name":"uart8",
+            "baud_rate":9600,
+            "data_bits":8,
+            "stop_bits":1,
+            "bufsz":2048,
+            "parity":0
+        }
+    ]
+}

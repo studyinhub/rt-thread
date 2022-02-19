@@ -28,9 +28,9 @@
 #define CONV_FROM_TM_YEAR(tm_year)      ((tm_year) + 1900)
 #define CONV_FROM_TM_MON(tm_mon)        ((tm_mon) + 1)
 
-/* rtc date upper bound reaches the year of 2099. */
+/* rtc date upper bound reaches the year of 2099.  2099 must be too large*/
 #define RTC_TM_UPPER_BOUND                                              \
-{   .tm_year = CONV_TO_TM_YEAR(2099),                                   \
+{   .tm_year = CONV_TO_TM_YEAR(2022),                                   \
     .tm_mon  = CONV_TO_TM_MON(12),                                      \
     .tm_mday  = 31,                                                     \
     .tm_hour  = 23,                                                     \
@@ -38,13 +38,16 @@
     .tm_sec  = 59,                                                      \
 }
 
+//4102415999 2099 12 31 23 59 59
+//1767196799
+//946684800
 /* rtc date lower bound reaches the year of 2000. */
 #define RTC_TM_LOWER_BOUND                                              \
-{   .tm_year = CONV_TO_TM_YEAR(2000),                                   \
-    .tm_mon  = CONV_TO_TM_MON(1),                                       \
-    .tm_mday  = 1,                                                      \
-    .tm_hour  = 0,                                                      \
-    .tm_min = 0,                                                        \
+{   .tm_year = CONV_TO_TM_YEAR(2021),                                   \
+    .tm_mon  = CONV_TO_TM_MON(6),                                       \
+    .tm_mday  = 20,                                                      \
+    .tm_hour  = 11,                                                      \
+    .tm_min = 20,                                                        \
     .tm_sec  = 0,                                                       \
 }
 
@@ -189,11 +192,16 @@ static rt_err_t nu_rtc_is_date_valid(const time_t *const t)
         t_lower = timegm((struct tm *)&tm_lower);
         initialised = RT_TRUE;
     }
+		
+
 
     /* check the date is supported by rtc. */
     if ((*t > t_upper) || (*t < t_lower))
-        return -(RT_EINVAL);
-
+		{
+					rt_kprintf("*t:%d  t_upper:%d t_lower:%d \n",*t ,t_upper,t_lower);
+			    return -(RT_EINVAL);
+		}
+  
     return RT_EOK;
 }
 
@@ -236,7 +244,11 @@ static rt_err_t nu_rtc_control(rt_device_t dev, int cmd, void *args)
         tm_in = gmtime(time);
 
         if (nu_rtc_is_date_valid(time) != RT_EOK)
-            return -(RT_ERROR);
+				{
+					  rt_kprintf("nu nu_rtc_is_date_valid failed\n");
+						return -(RT_ERROR);
+				}
+            
 
         hw_time.u32Year = CONV_FROM_TM_YEAR(tm_in->tm_year);
         hw_time.u32Month = CONV_FROM_TM_MON(tm_in->tm_mon);

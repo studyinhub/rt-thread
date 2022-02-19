@@ -1,0 +1,15 @@
+<html>
+
+<head>
+    <title> SSI Test </title>
+</head>
+
+<body>
+    <!--#include virtual="/top.html" -->
+    <h1>帮助页面</h1>
+    <font size=\ "+2\">The <b>index.html</b> page embedded in the following page</font>
+    <br/><br/>
+    <a href="javascript:history.go(-1);">Go back</a>
+</body>
+
+</html>
