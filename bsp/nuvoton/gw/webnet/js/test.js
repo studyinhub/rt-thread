@@ -28,12 +28,12 @@ function addToast(msg,timeout=1000) {
 //     })
 // }
 
-async function load_config() {
+async function load_config(src='api') {
 
     const response_1 = await new Promise((resolve, reject) => {
-        var load_from_file = false
-        if(load_from_file){
+        if(src!=='api'){
             // 从文件系统中的配置文件获取
+            console.log('从config.json获取配置',src)
             $.get("./config.json", function (response) {
                 console.log('async load config from config.json');
                 localStorage.setItem('config', JSON.stringify(response));
@@ -42,6 +42,7 @@ async function load_config() {
         }else
         {
             // 从 API 中获取
+            console.log('从api获取配置',src)
             $.get("cgi-bin/get_config", function (response) {
                 console.log('async load config from api get_config');
                 localStorage.setItem('config', response);

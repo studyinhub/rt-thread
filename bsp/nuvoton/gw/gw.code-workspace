@@ -4,15 +4,6 @@
 			"path": "."
 		},
 		{
-			"path": "../../../../tools/NUC980_NuWriter_CMD"
-		},
-		{
-			"path": "../../../../../C_Projects/uffs"
-		},
-		{
-			"path": "../libraries"
-		},
-		{
 			"path": "../../../../../python_project/pymodbus"
 		}
 	],
@@ -50,7 +41,14 @@
 			"sstream": "c",
 			"streambuf": "c",
 			"cstdio": "c",
-			"filesystem": "c"
+			"filesystem": "c",
+			"app_config.h": "c",
+			"mbframe.h": "c",
+			"config.h": "c",
+			"stdint.h": "c",
+			"mythreads.h": "c",
+			"modbus_x.h": "c",
+			"rtthread.h": "c"
 		},
 		"liveServer.settings.multiRootWorkspaceName": "gw"
 	}

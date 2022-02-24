@@ -1,19 +1,35 @@
 #include "modbus_x.h"
 #include "config.h"
-
 #include "mb.h"
 #include "mb_m.h"
 #include "user_mb_app.h"
-
 #include "app_config.h"
 
-#define MB_POLL_THREAD_PRIORITY 10
-#define MB_SEND_THREAD_PRIORITY RT_THREAD_PRIORITY_MAX - 1
+#include "crc16.h"
+#include "utils.h"
 
-#define LOG_TAG              "modbusx"
-#define LOG_LVL              LOG_LVL_DBG
+
+#define LOG_TAG "modbusx"
+#define LOG_LVL LOG_LVL_DBG
 #include <ulog.h>
 
+
+
+
+// ASCII 接收消息队列
+static struct rt_messagequeue asc_recv_mq;
+static rt_uint8_t asc_msg_pool[2048];
+// RTU 接收响应消息队列
+static struct rt_messagequeue rtu_recv_mq;
+static rt_uint8_t rtu_msg_pool[2048];
+
+ALIGN(RT_ALIGN_SIZE)
+static char thread_asc_stack[1024];
+static struct rt_thread thread_asc;
+
+ALIGN(RT_ALIGN_SIZE)
+static char thread_rtu_stack[1024];
+static struct rt_thread thread_rtu;
 
 int RAddLimitMax = 15; //允许读寻址的最大值
 int RAddLimitMin = 0;  //允许读寻址的最小值
@@ -33,190 +49,414 @@ struct CONFIG g_stConfig = {
         {"uart8", 0, "rtu", RT_SERIAL_CONFIG_DEFAULT}}   // RTU-RS485 master
 };
 
-static void send_thread_entry(void *parameter)
+// 01 03 00 01 00 01 D5 CA
+// 01 03 00 00 00 0A C5 CD
+
+void send_rtu_frame(uint8_t slaveaddr, uint8_t funcode, uint16_t readStart, uint16_t readCnt)
 {
-    eMBMasterReqErrCode error_code = MB_MRE_NO_ERR;
-    rt_uint16_t error_count = 0;
-    USHORT data[2] = {0};
-    LOG_I("send_thread_entry");
+    char *pwBuf;
+    int i = 0;
+    uint16_t crc;
 
-    while (1)
+    log_i("发送功能码%d到%d", funcode, slaveaddr);
+
+    pwBuf = rt_malloc(24);
+    struct SER_PORT *port = &g_stConfig.serPort[2];
+
+    *pwBuf = slaveaddr;
+    i += 1;
+
+    *(pwBuf + i) = funcode;
+    i += 1;
+
+    *(pwBuf + i) = (readStart >> 8) && 0xFF;
+    i += 1;
+
+    *(pwBuf + i) = readStart & 0x00ff;
+    i += 1;
+
+    *(pwBuf + i) = (readCnt >> 8) && 0xFF;
+    i += 1;
+
+    *(pwBuf + i) = readCnt & 0x00FF;
+    i += 1;
+
+    crc = CRC(pwBuf, i);        //CRC校验，7+k*2是校验的长度
+    *(pwBuf + i) = crc / 0x100; //校验值高8位
+    i += 1;
+
+    *(pwBuf + i) = crc % 0x100; //校验值低8位
+    i += 1;
+
+    for (int j = 0; j < i; j++)
     {
-        /* Test Modbus Master */
-        data[0] = (USHORT)(rt_tick_get() / 10);
-        data[1] = (USHORT)(rt_tick_get() % 10);
+        rt_kprintf("%02X ", *(pwBuf + j));
+    }
+    rt_kprintf("\n");
 
-        // error_code = eMBMasterReqWriteMultipleHoldingRegister(g_stConfig.slaveAddr,    /* salve address */
-        //                                                       g_stConfig.startRegAddr, /* register start address */
-        //                                                       g_stConfig.regsCnt,      /* register total number */
-        //                                                       data,                /* data to be written */
-        //                                                       RT_WAITING_FOREVER); /* timeout */
+    rt_device_write(port->device, 0, pwBuf, i);
+    free(pwBuf);
+}
 
-        eMBMasterReqReadHoldingRegister(g_stConfig.slaveAddr,
-                                        g_stConfig.startRegAddr,
-                                        g_stConfig.regsCnt,
-                                        500);
+// :011706000000000000E2
 
-        // for(int i=0;i<g_stConfig.regsCnt;i++)
+// :01 17 1A 0328 0000 0000 0010 0000 0000 0000 0000 0000 0000 0000 0000 0000 93\CR\LF
+void response_ascii_frame(uint8_t slaveAddr, uint8_t *buf, uint16_t byteCnt)
+{
+    char *pwBuf;
+    uint8_t calc_lrc = 0;
+    int i = 0;
+    log_i("response_ascii_frame:%d", byteCnt);
+
+    // i = 1;
+    // unsigned char *pointer;
+    // pointer = (unsigned char *)&i;
+
+    // if (*pointer)
+    // {
+    //     log_w("litttle_endian");
+    // }
+    // else
+    // {
+    //     log_w("big endian/n");
+    // }
+
+    // for (i = 0; i < byteCnt; i++)
+    // {
+    //     log_d("i:%d v:%02X:", i, *(buf + i));
+    // }
+
+    // :+（slaveAddr + funcode + quantity bytes + lrc） * 2 + datalen + '\r\n'
+    // 其中 datalen 已经是字节数了
+    uint16_t frame_len = 1 + (1 + 1 + 1 + 1 + byteCnt) * 2 + 2;
+    log_d("frame_len:%d", frame_len);
+
+    pwBuf = rt_malloc(frame_len);
+    rt_memset(pwBuf, '\0', frame_len);
+
+    uint8_t funCode = 0x17;
+
+    *pwBuf = ':';
+    HToAChar(pwBuf + 1, &slaveAddr, 1);
+    HToAChar(pwBuf + 3, &funCode, 1);
+    HToAChar(pwBuf + 5, (uint8_t *)&byteCnt, 1);
+    HToAChar(pwBuf + 7, (uint8_t *)buf, byteCnt);
+
+    // // 补充上 LRC
+    calc_lrc = ASCII_LRC(pwBuf + 1, 2 * (3 + byteCnt)); //
+
+    LOG_D("calc_lrc:0x%02X", calc_lrc);
+
+    HToAChar(pwBuf + 7 + 2 * byteCnt, (uint8_t *)&calc_lrc, 1);
+    rt_memcpy(pwBuf + 7 + 2 * byteCnt + 2, "\r\n", 2);
+
+    // for (int j = 0; j < frame_len; j++)
+    // {
+    //     rt_kprintf("%02x ", *(pwBuf + j));
+    // }
+
+    // log_d("res:%s", pwBuf);
+
+    for (int i = 0; i < frame_len; i++)
+    {
+        rt_kprintf("%c", *(pwBuf + i));
+    }
+
+    struct SER_PORT *port = &g_stConfig.serPort[1];
+    log_d("port:%s", port->dev_name);
+    rt_device_write(port->device, 0, pwBuf, frame_len);
+    free(pwBuf);
+}
+
+uint8_t parse_ascii_frame(char *ptrFrame, rt_uint32_t frame_len)
+{
+    log_d("开始解析 ASCII frame:%d", frame_len);
+
+    uint8_t slaveAddr; //上位机请求中的从机地
+    uint8_t funcode;   //上位机请求中的从机地址
+
+    uint16_t ReadDatStAdd; //上位机要的读的数据起始
+    int ReadDatLenth;      //上位机要读的数据的长度
+
+    uint16_t WriteSingleData; // 06 功能码写单个寄存器的数据
+
+    int WriteDatStAdd; //上位机要写的数据的起始地址
+    int WriteDatLenth; //上位机要写的数据的长度
+    int WriteByteNum;  //上位机要写的数据的字节长度=数据长度*2
+
+    uint8_t lrc = 0; //上位机请求中的 LRC
+    uint8_t calc_lrc = 0;
+
+    rt_bool_t isValid = RT_FALSE;
+
+    uint8_t *pWbuf;
+
+    struct SER_PORT *port = &g_stConfig.serPort[0];
+
+    int i = 0, j = 0;
+
+    // for (i = 0; i < frame_len; i++)
+    // {
+    //     rt_kprintf("%02x ", *(ptrFrame + i));
+    // }
+    // rt_kprintf("\n");
+
+    for (i = 0; i < frame_len; i++)
+    {
+        // 查找帧头
+        if (*(ptrFrame + i) != ':')
+        {
+            continue;
+        }
+        j += 1;
+        slaveAddr = ATOHChar(ptrFrame + i + j);
+        j += 2;
+        log_d("slaveAddr:%d", slaveAddr);
+
+        // if (slaveAddr != port->slaveAddr)
         // {
-        //     rt_kprintf("usMRegHoldBuf[%d]:%d\n",i,usMRegHoldBuf[0][i]);
+        //     LOG_W("Please check the slave addr");
+        //     continue;
         // }
 
-        /* Record the number of errors */
-        if (error_code != MB_MRE_NO_ERR)
+        funcode = ATOHChar(ptrFrame + i + j);
+        j += 2;
+        LOG_D("funcode:0x%02x", funcode);
+
+        // if (funcode != 0x17) //功能代码符合0x17
+        // {
+        //     LOG_W("Only support 0x17 but got 0x%02x", funcode);
+        //     continue;
+        // }
+
+        if (funcode == 0x03 || funcode == 0x17)
         {
-            error_count++;
+            ReadDatStAdd = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            LOG_D("ReadDatStAdd:%04x", ReadDatStAdd);
+
+            //功能代码23（0x17)要读取的数据起始地址，占4个字节[3]~[6]
+            ReadDatLenth = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            LOG_D("ReadDatLenth:%04x", ReadDatLenth);
+
+            //功能代码23（0x17)要读取的数据长度，占4个字节[7]~[10]
+            if (!(ReadDatStAdd >= RAddLimitMin && ReadDatStAdd <= RAddLimitMax && ReadDatStAdd + ReadDatLenth >= RAddLimitMin && ReadDatStAdd + ReadDatLenth <= RAddLimitMax + 1)) //读的地址和长度符合
+            //起始地址不能超范围，起始地址+数据长度不能超范围
+            {
+                LOG_W("Invalid read parameters");
+                continue;
+            }
         }
+
+        if (funcode == 0x06)
+        {
+            WriteDatStAdd = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            LOG_D("WriteDatStAdd:%04x", WriteDatStAdd); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
+
+            WriteSingleData = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            LOG_D("WriteSingleData:%04x", WriteSingleData); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
+        }
+
+        if (funcode == 0x17)
+        {
+            WriteDatStAdd = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            LOG_D("WriteDatStAdd:%04x", WriteDatStAdd); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
+
+            WriteDatLenth = ATOHInt(ptrFrame + i + j); //功能代码23（0x17)要写取的寄存器数量，占4个字节[15]~[18]
+            j += 4;
+            LOG_D("WriteDatLenth:%04x", WriteDatLenth);
+
+            WriteByteNum = ATOHChar(ptrFrame + i + j); //功能代码23（0x17)要写取的数据字节个数，占2个字节[19]~[20]
+            j += 2;
+            LOG_D("WriteByteNum:%02x", WriteByteNum);
+
+            if (!(WriteByteNum == WriteDatLenth * 2 && (WriteDatLenth == 0 || (WriteDatLenth > 0 && WriteDatStAdd >= WAddLimitMin && WriteDatStAdd <= WAddLimitMax && WriteDatStAdd + WriteDatLenth >= WAddLimitMin + 1 && WriteDatStAdd + WriteDatLenth <= WAddLimitMax + 1)))) //写的地址和长度符合
+            {
+                //写的数据的起始地址不能超范围，写的数据起始地址+数据长度不能超范围
+                LOG_W("Invalid write parameters");
+                continue;
+            }
+
+            pWbuf = rt_malloc(WriteByteNum);
+            for (int k = 0; k < WriteByteNum; k++)
+            {
+                int temp = ATOHChar(ptrFrame + i + j + 2 * k);
+                rt_kprintf("temp:%02x ", temp);
+                *(pWbuf + k) = temp;
+                rt_kprintf("pWbuf:%02x ", *(pWbuf + k));
+                if (k == WriteByteNum)
+                    rt_kprintf("\n");
+            }
+            j += WriteByteNum * 2; //  注意这里是 * 2 ，不是 *4，长度 4 个字节，ASCII 的表示是翻倍的，占用 4*2 个 字节。
+        }
+
+        calc_lrc = ASCII_LRC(ptrFrame + 1, j - 1); // j-1 表示不计算 ：
+        LOG_D("calc_lrc:%02X %d %d", calc_lrc, i, j);
+
+        // for(int n = 0;n<j+2;n++)
+        // {
+        //     LOG_D("lrc %d:%02x",n,*(ptrFrame + i + n));
+        // }
+
+        lrc = ATOHChar(ptrFrame + i + j);
+        LOG_D("lrc:%02X", lrc);
+
+        j += 2;
+        if (calc_lrc != lrc || calc_lrc == -1) //LRC校验和判断 -1 表示计算失败
+        {
+            LOG_W("LRC mismatch!");
+            continue;
+        }
+
+        if (!(*(ptrFrame + i + j) == 0x0D && *(ptrFrame + i + j + 1) == 0x0A)) //结束符0x0D,和0x0A符合
+        {
+            LOG_W("Not found 0x0D && 0x0A");
+            continue;
+        }
+        isValid = RT_TRUE;
     }
-}
 
-char ATOHChar(char *var) //ASCII 字符串 转8位16进制数 '12'转为0x12
-{
-    char var1 = *var;
-    char var2 = *(var + 1);
-    char temp = 0;
-    if (var1 >= 0x30 && var1 <= 0x39)
-        temp = var1 - '0';
-    else if (var1 >= 0x30 && var1 <= 0x39)
-        temp = var1 - 'A' + 10;
-
-    temp = temp << 4;
-
-    if (var2 >= 0x30 && var2 <= 0x39)
-        temp = temp + var2 - '0';
-    else if (var2 >= 'A' && var2 <= 'F')
-        temp = temp + var2 - 'A' + 10;
-    return temp;
-}
-
-// LRC checks the content of the message other than [:] of START and [CR][LF] of END. The sending side calculates and sets. The receiving side calculates based on the received message, and compares the calculation result with the received LRC. The received message is deleted if the calculation result and received LRC do not match.
-// Add up the byte number of the message consisting of 8 consecutive bits. The result except the carry (overflow) is converted to 2’s complement.
-// http://www.ip33.com/lrc.html
-// 如果内容本身是已经 ASCII 转换过后的 buf
-int HEX_LRC(uint8_t *buf, uint8_t len)
-{
-    int result = 0;
-    LOG_D("HEX_LRC:");
-    for (int i = 0; i < len; i++)
+    if (!isValid)
     {
-        rt_kprintf("%02x ", *(buf + i));
-        result += *(buf + i);
+        return 0;
+    }
+
+    log_d("解析完毕 Valid!");
+    // NO  Code                         Name                                 Function
+    // 1    03(03h)             Read holding registers                Reading multiple registers
+    // 2    06(06h)             Preset single register                Writing registers
+    // 3    16(10h)             Preset multiple registers             Writing multiple registers
+    // 4    23(17h)             Read/write 4x registers/              Reading/writing multiple registers
+
+    switch (funcode)
+    {
+    case 03:
+        break;
+    case 06:
+        break;
+    case 16:
+        break;
+    case 23:
+        log_i("功能码:%d Reading/writing multiple registers", funcode);
+        log_i("从机地址:%d", slaveAddr);
+        log_i("读起始地址:%d", ReadDatStAdd);
+        log_i("读寄存器数量:%d", ReadDatLenth);
+        log_i("写起始地址:%d", WriteDatStAdd);
+        log_i("写寄存器数量:%d", WriteDatLenth);
+        log_i("写字节长度:%d", WriteByteNum);
+
+        if (WriteByteNum)
+        {
+            rt_kprintf("写数据:");
+            for (int i = 0; i < WriteByteNum; i++)
+            {
+                rt_kprintf("%02x ", pWbuf[i]);
+            }
+            rt_kprintf("\n");
+        }
+        else
+        {
+            log_d("不需要写数据");
+        }
+        // https://www.cnblogs.com/iluzhiyong/p/4929165.html
+        // https://blog.csdn.net/liboxiu/article/details/86473516
+        // https://www.cnblogs.com/wt88/p/9624373.html
+
+        // 设备地址          Modbus地址                          描述                    功能                R/W
+        // 1~10000         address-1        0xxxx           Coils（Output）          01,05,15              R/W
+        // 10001~20000     address-10001    0xxxx           Discrete Inputs           02                  R
+        // 30001~40000     address-30001    0xxxx           Input Registers           04                  R
+        // 40001~50000     address-40001    0xxxx           Holding Registers         03                 R/W
+
+        // 0x01: 读线圈寄存器          Coils                     R
+        // 0x02: 读离散输入寄存器      Discrete Inputs            R
+        // 0x03: 读保持寄存器         Holding Registers          R
+        // 0x04: 读输入寄存器         Input Registers            R
+        // 0x05: 写单个线圈寄存器                                 W
+        // 0x06: 写单个保持寄存器                                 W
+        // 0x0f: 写多个线圈寄存器                                 W
+        // 0x10: 写多个保持寄存器                                 W
+
+        send_rtu_frame(slaveAddr, 3, ReadDatStAdd, ReadDatLenth);
+
+        // 16
+        if (WriteDatLenth)
+        {
+            rt_thread_delay(100);
+            // send_rtu_frame(slaveAddr, 0x10,wr);
+        }
+
+        free(pWbuf);
+        break;
+    default:
+        log_w("Not support now!");
+        break;
+    }
+
+    return 0;
+}
+
+struct RTU_FRAME
+{
+    uint8_t slaveAddr;
+    uint8_t funCode;
+    uint8_t byteCnt;
+    uint8_t resovled;
+    // // 本来想在这里定义为 uint16_t 的指针，后来发现反而不合适，需要把16 位数组装起来，然后还要拆开来，否则在转换为 ASCII 码的时候字节顺序不对
+    // // 比如 0x1234 会变为 33 34 31 32 也就是 3412
+    // uint8_t *pBytes;
+    uint16_t crc;
+};
+
+uint8_t parse_rtu_frame(char *ptrFrame, rt_uint16_t frame_len)
+{
+    rt_uint16_t i = 0;
+    uint8_t *pwBuf;
+
+    struct RTU_FRAME rtu_frame;
+
+    log_d("开始解析 RTU frame:%d", frame_len);
+    for (i = 0; i < frame_len; i++)
+    {
+        rt_kprintf("%02X ", *(ptrFrame + i));
     }
     rt_kprintf("\n");
 
-    return 256 - (result % 256);
-}
+    rtu_frame.slaveAddr = *ptrFrame;
+    rtu_frame.funCode = *(ptrFrame + 1);
+    rtu_frame.byteCnt = *(ptrFrame + 2);
 
-// 如果是对 ASCII buf 直接进行计算，则需要先收聚 ASCII，然后再计算
-int ASCII_LRC(uint8_t *buf, uint8_t len)
-{
-    int result = 0;
-    // 先要对 ASCII 转换为 16 进制
-    // 必须是 2 的倍数
+    log_d("slaveAddr:%d", rtu_frame.slaveAddr);
+    log_d("funCode:%d", rtu_frame.funCode);
+    log_d("byteCnt:%d", rtu_frame.byteCnt);
 
-    LOG_D("ASCII_LRC(%d):", len);
-
-    for (int j = 0; j < len; j++)
+    if (rtu_frame.byteCnt % 2 != 0)
     {
-        rt_kprintf("%02x ", *(buf + j));
-    }
-
-    rt_kprintf("\n");
-
-    if (len % 2 != 0)
-    {
-        LOG_W("len is not mod by 2,please check");
+        log_e("数据长度不对");
         return -1;
     }
 
-    uint8_t *hBuf;
-    uint8_t hLen = len / 2;
+    // rtu_frame.pBytes = rt_malloc(rtu_frame.byteCnt / 2 * sizeof(uint16_t));
+    // for (int j = 0; j < rtu_frame.byteCnt; j += 2)
+    // {
+    //     uint16_t data_hi = *(ptrFrame + 3 + j);
+    //     uint16_t data_lo = *(ptrFrame + 4 + j);
+    //     // log_d("data_lo:%02x",data_lo);
+    //     // log_d("data_hi:%02x",data_hi);
+    //     *(rtu_frame.pBytes + j / 2) = data_hi << 8 | data_lo;
+    //     log_d("j:%d v:%04X", j / 2, *(rtu_frame.pBytes + j / 2));
+    // }
+    uint16_t crc_lo = *(ptrFrame + 3 + rtu_frame.byteCnt);
+    uint16_t crc_hi = (*(ptrFrame + 4 + rtu_frame.byteCnt) << 8) & 0xFF00;
+    rtu_frame.crc = crc_hi | crc_lo;
 
-    LOG_D("hLen:%d", hLen);
+    log_d("crc:%04X", rtu_frame.crc);
 
-    hBuf = rt_malloc(hLen);
-    rt_memset(hBuf, 0, hLen);
-
-    for (int i = 0; i < hLen; i++)
-    {
-        *(hBuf + i) = ATOHChar(buf + i * 2);
-
-        rt_kprintf("%02x ", *(hBuf + i));
-    }
-    rt_kprintf("\n");
-
-    result = HEX_LRC(hBuf, len / 2);
-
-    rt_free(hBuf);
-
-    return result;
-}
-
-int ATOHInt(char *var) //ASCII 字符串 转16位16进制数 '12AB'转为0x12AB
-{
-    char var1 = *var;
-    char var2 = *(var + 1);
-    char var3 = *(var + 2);
-    char var4 = *(var + 3);
-
-    int temp = 0;
-    if (var1 >= 0x30 && var1 <= 0x39)
-        temp = var1 - '0';
-    else if (var1 >= 0x30 && var1 <= 0x39)
-        temp = var1 - 'A' + 10;
-    temp = temp << 4;
-    if (var2 >= 0x30 && var2 <= 0x39)
-        temp = temp + var2 - '0';
-    else if (var2 >= 'A' && var2 <= 'F')
-        temp = temp + var2 - 'A' + 10;
-    temp = temp << 4;
-    if (var3 >= 0x30 && var3 <= 0x39)
-        temp = temp + var3 - '0';
-    else if (var3 >= 'A' && var3 <= 'F')
-        temp = temp + var3 - 'A' + 10;
-    temp = temp << 4;
-    if (var4 >= 0x30 && var4 <= 0x39)
-        temp = temp + var4 - '0';
-    else if (var4 >= 'A' && var4 <= 'F')
-        temp = temp + var4 - 'A' + 10;
-
-    return temp;
-}
-
-int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint8_t len) //4位16进制数，转ASCII字符  0,1,2,3 转 ‘0’，‘1’，‘2’，‘3’
-{
-    char temp = 0;
-    char nibble[2]; // nibble 半字节的意思
-    int i = 0, j = 0;
-
-    char buffer[128];
-
-    for (i = 0; i < len; i++)
-    {
-        nibble[0] = pSrcHex[i] >> 4 & 0x0F;
-        nibble[1] = pSrcHex[i] & 0x0F;
-        for (j = 0; j < 2; j++)
-        {
-            if (nibble[j] < 10)
-            {
-                nibble[j] += 0x30;
-            }
-            else if (nibble[j] < 16)
-            {
-                nibble[j] = nibble[j] - 10 + 'A';
-            }
-            else
-            {
-                return 0;
-            }
-        }
-        memcpy(buffer + i * 2, nibble, 2);
-    }
-
-    buffer[2 * len] = 0x00;
-    memcpy(pDstAsc, buffer, 2 * len);
-    pDstAsc[2 * len] = 0x00;
-    return 1;
+    response_ascii_frame(rtu_frame.slaveAddr, ptrFrame + 3, rtu_frame.byteCnt);
 }
 
 
@@ -224,7 +464,7 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint8_t len) //4位16进制数，�
 static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size)
 {
     struct rx_msg msg;
-    rt_err_t result = RT_EOK;
+    
 
     msg.dev = dev;
     msg.size = size;
@@ -252,290 +492,10 @@ static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size)
             }
         }
     }
-    return result;
+    return 0;
 }
 
-
-
-static void mbpoll_thread_entry(void *parameter)
-{
-    eMBMasterInit(MB_RTU, MB_MASTER_USING_PORT_NUM, MB_MASTER_USING_PORT_BAUDRATE, MB_PAR_NONE);
-    eMBMasterEnable();
-    while (1)
-    {
-        eMBMasterPoll();
-        rt_thread_mdelay(MB_POLL_CYCLE_MS);
-    }
-}
-
-static void serial_thread_entry(void *parameter)
-{
-    char ch;
-    int index = (int)parameter, i = 0, j = 0;
-    LOG_D("%s read thread started\n", g_stConfig.serPort[index].dev_name);
-
-    int ReadDatStAdd;  //上位机要的读的数据起始地
-    int ReadDatLenth;  //上位机要读的数据的长度
-    int WriteDatStAdd; //上位机要写的数据的起始地址
-    int WriteDatLenth; //上位机要写的数据的长度
-    int WriteByteNum;  //上位机要写的数据的字节长度=数据长度*2
-    uint8_t slaveAddr; //上位机请求中的从机地址
-    uint8_t funcode;   //上位机请求中的功能码
-    uint8_t lrc;       //上位机请求中的 LRC
-
-    static int f_index = 0;
-    clock_t start = 0, end = 0;
-    int readlen = 0;
-    int buflen = 0;
-    uint8_t calc_lrc = 0;
-
-    struct SER_PORT *port = &g_stConfig.serPort[index];
-    char *prBuf = port->rx_buf;
-    char *pwBuf = port->tx_buf;
-
-    while (1)
-    {
-        // 等待数据接收完成
-        rt_sem_control(&g_stConfig.serPort[index].rx_sem, RT_IPC_CMD_RESET, RT_NULL);
-        /* 阻塞等待接收信号量，等到中断后再次读取数据 */
-        rt_sem_take(&g_stConfig.serPort[index].rx_sem, RT_WAITING_FOREVER);
-
-        if (!rt_strcmp(port->prot, "ascii"))
-        {
-
-            start = clock();
-            // 从第1个字节开始计时，超过 10ms，就终止本次读取
-            while (1)
-            {
-
-                // : 01 17 0004 0003 000B 0002 04 009B 0001 34
-
-                if (port->CanRecv <= 1)
-                    port->CanRecv = 1;
-
-                // rt_kprintf("CanRecv:%d\n", port->CanRecv);
-                readlen = rt_device_read(port->device, 0, prBuf + MAX_BUF_LENGTH - port->CanRecv, port->CanRecv);
-                // rt_kprintf("readlen:%d\n", readlen);
-                if (readlen > 0)
-                {
-                    start = clock(); //收到数据，重新开始计时，返回值单位：毫秒
-                    port->CanRecv = port->CanRecv - readlen;
-                }
-                else
-                {
-                    end = clock();
-                    if ((end - start) > 5) //间隔超时 5ms
-                        break;
-                }
-            }
-
-            buflen = MAX_BUF_LENGTH - port->CanRecv; //接收到的总字节数
-
-            rt_kprintf("buf:%s\n", prBuf);
-
-            // 处理 buf 中的所有数据
-
-            for (i = 0; i < buflen; i++)
-            {
-                // 查找帧头
-                if (*(prBuf + i) != ':')
-                {
-                    continue;
-                }
-                j = 1;
-                slaveAddr = ATOHChar(prBuf + i + j);
-                j += 2;
-                if (slaveAddr != port->slaveAddr)
-                {
-                    LOG_W("Please check the slave addr");
-                    continue;
-                }
-
-                LOG_D("slaveAddr:%d", slaveAddr);
-
-                // 查找帧尾,不查找
-                // 判断是否是 0x17
-
-                // printf("%d(%02x),%d(%02x)\n",*(prBuf+i+3),*(prBuf+i+3),*(prBuf+i+4),*(prBuf+i+4));
-
-                funcode = ATOHChar(prBuf + i + j);
-                j += 2;
-
-                LOG_D("funcode:0x%02x", funcode);
-                if (funcode != 0x17) //功能代码符合0x17
-                {
-                    LOG_W("Only support 0x17 but got 0x%02x", funcode);
-                    continue;
-                }
-
-                ReadDatStAdd = ATOHInt(prBuf + i + j);
-                j += 4;
-
-                LOG_D("ReadDatStAdd:%04x", ReadDatStAdd);
-                //功能代码23（0x17)要读取的数据起始地址，占4个字节[3]~[6]
-                ReadDatLenth = ATOHInt(prBuf + i + j);
-                j += 4;
-                LOG_D("ReadDatLenth:%04x", ReadDatLenth);
-
-                //功能代码23（0x17)要读取的数据长度，占4个字节[7]~[10]
-                if (!(ReadDatStAdd >= RAddLimitMin && ReadDatStAdd <= RAddLimitMax && ReadDatStAdd + ReadDatLenth >= RAddLimitMin + 1 && ReadDatStAdd + ReadDatLenth <= RAddLimitMax + 1)) //读的地址和长度符合
-                    //起始地址不能超范围，起始地址+数据长度不能超范围
-                {
-                    LOG_W("Invalid read parameters");
-                    continue;
-                }
-
-                WriteDatStAdd = ATOHInt(prBuf + i + j);
-                j += 4;
-                LOG_D("WriteDatStAdd:%04x", WriteDatStAdd); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
-
-                WriteDatLenth = ATOHInt(prBuf + i + j); //功能代码23（0x17)要写取的寄存器数量，占4个字节[15]~[18]
-                j += 4;
-                LOG_D("WriteDatLenth:%04x", WriteDatLenth);
-
-                WriteByteNum = ATOHChar(prBuf + i + j); //功能代码23（0x17)要写取的数据字节个数，占2个字节[19]~[20]
-                j += 2;
-                LOG_D("WriteByteNum:%02x", WriteByteNum);
-
-                if (!(WriteByteNum == WriteDatLenth * 2 && (WriteDatLenth == 0 || (WriteDatLenth > 0 && WriteDatStAdd >= WAddLimitMin && WriteDatStAdd <= WAddLimitMax && WriteDatStAdd + WriteDatLenth >= WAddLimitMin + 1 && WriteDatStAdd + WriteDatLenth <= WAddLimitMax + 1)))) //写的地址和长度符合
-                {
-                    //写的数据的起始地址不能超范围，写的数据起始地址+数据长度不能超范围
-                    LOG_W("Invalid read parameters");
-                    continue;
-                }
-
-                j += WriteByteNum * 2; //  注意这里是 * 2 ，不是 *4，长度 4 个字节，ASCII 的表示是翻倍的，占用 4*2 个 字节。
-                LOG_D("j:%d", j);
-
-                uint8_t test[5] = {0x01, 0xA0, 0x7C, 0xFF, 0x02};
-
-                calc_lrc = ASCII_LRC(prBuf + 1, j - 1); // j-1 表示不计算 ：
-                LOG_D("calc_lrc:%02x", calc_lrc);
-
-                lrc = ATOHChar(prBuf + i + j);
-                j += 2;
-                LOG_D("lrc:%02x", lrc);
-
-                if (calc_lrc != lrc || calc_lrc == -1) //LRC校验和判断 -1 表示计算失败
-                {
-                    LOG_W("LRC mismatch!");
-                    continue;
-                }
-
-                if (!(*(prBuf + i + j) == 0x0D && *(prBuf + i + j + 1) == 0x0A)) //结束符0x0D,和0x0A符合
-                {
-                    LOG_W("Not found 0x0D && 0x0A");
-                    continue;
-                }
-                LOG_D("Valid!");
-                // :011706000000000000E2
-                // reset  j
-                j = 0;
-                memcpy(pwBuf, prBuf, 5); // 复制接收到的: slaveAddr 和 funCode 共 5 个字节
-                j += 5;
-                //
-                LOG_D("read from %04x for %04x quantity register", ReadDatStAdd, ReadDatLenth);
-                // 读取 3 个寄存器，每个寄存器共 2 个字节，共 6 个字节，12 个 Ascii 字符
-                uint8_t temp_read_cnt = ReadDatLenth * 2;
-                HToAChar(pwBuf + j, &temp_read_cnt, 1);
-                j += 2;
-
-                uint16_t *pRespdata;
-
-                pRespdata = rt_malloc(ReadDatLenth * sizeof(uint16_t));
-                // 这里设置测试数据
-                *pRespdata = 0x0000;
-                *(pRespdata + 1) = 0x000;
-                *(pRespdata + 2) = 0x0000;
-
-                // 转换为 ascii
-
-                HToAChar(pwBuf + j, (uint8_t *)pRespdata, 6);
-                j += 12;
-                // 补充上 LRC
-                calc_lrc = ASCII_LRC(pwBuf + 1, j - 1); // j-1 表示不计算 ：
-
-                HToAChar(pwBuf + j, (uint8_t *)&calc_lrc, 1);
-                j += 2;
-
-                rt_memcpy(pwBuf + j, "\r\n", 2);
-                j += 2;
-
-                LOG_D("resp:%d", j);
-                // =j 表示看最后一个字节是否为 0
-                for (int k = 0; k <= j; k++)
-                {
-                    rt_kprintf("%02x ", *(pwBuf + k));
-                }
-
-                rt_device_write(port->device, 0, pwBuf, j);
-
-                free(pRespdata);
-
-                if (buflen - i < 21 + WriteByteNum * 4 + 4) // 如果轮循剩下的字节不足21+WriteByteNum则停止轮循，退出，接收数据不完整
-                    break;
-
-                //如果都符合,则准备给上位机回复上位机想要的数据
-                // //modbus Ascii
-                // TXBuff_Rs458A[0] = ':';                                                                                                  //起始位“:”
-                // TXBuff_Rs458A[1] = HToAChar(MasterID / 0x10);                                                                            //设备地址高4位
-                // TXBuff_Rs458A[2] = HToAChar(MasterID % 0x10);                                                                            //设备地址低4位
-                // TXBuff_Rs458A[3] = '1';                                                                                                  //功能代码地址高4位
-                // TXBuff_Rs458A[4] = '7';                                                                                                  //功能代码地址低4位
-                // TXBuff_Rs458A[5] = HToAChar(char(ReadDatLenth * 2) / 0x10);                                                              //数据字节长度高4位
-                // TXBuff_Rs458A[6] = HToAChar(char(ReadDatLenth * 2) % 0x10);                                                              //数据字节长度低4位
-                // sum = TXBuff_Rs458A[1] + TXBuff_Rs458A[2] + TXBuff_Rs458A[3] + TXBuff_Rs458A[4] + TXBuff_Rs458A[5] + TXBuff_Rs458A[6] ； //前面6个数的LRC校验和
-                //       for (k = 0; k < ReadDatLenth; k++)                                                                                 //每个数据占四个字节
-                // {
-                //     TXBuff_Rs458A[7 + k * 4] = HToAChar(DataReg[ReadDatStAdd] / 0x1000 % 0x10);
-                //     sum = sum + TXBuff_Rs458A[7 + k * 4];
-                //     TXBuff_Rs458A[8 + k * 4] = HToAChar(DataReg[ReadDatStAdd] / 0x100 % 0x10);
-                //     sum = sum + TXBuff_Rs458A[8 + k * 4];
-                //     TXBuff_Rs458A[9 + k * 4] = HToAChar(DataReg[ReadDatStAdd] / 0x10 % 0x10);
-                //     sum = sum + TXBuff_Rs458A[9 + k * 4];
-                //     TXBuff_Rs458A[10 + k * 4] = HToAChar(DataReg[ReadDatStAdd] % 0x10);
-                //     sum = sum + TXBuff_Rs458A[10 + k * 4];
-                // }
-                // TXBuff_Rs458A[7 + k * 4] = HToAChar(sum / 0x10); //LRC校验和高4位,注意此时的k等于ReadDatLenth
-                // TXBuff_Rs458A[8 + k * 4] = HToAChar(sum % 0x10); //LRC校验和低4位
-                // TXBuff_Rs458A[9 + k * 4] = 0x0d;                 //回车
-                // TXBuff_Rs458A[10 + k * 4] = 0x0a;                //换行
-                // sendLenth = 11 + k * 4;                          //发送字节长度
-                // SentA(TXBuff_Rs458A, sendLenth);
-                // memset(TXBuff_Rs458A, '\0', sizeof(TXBuff_Rs458A));         //清空RS485A接收缓存
-                // if (WriteByteNum == WriteDatLenth * 2 && WriteDatLenth > 0) //如果上位机有写数据，则将接收到的要写的数据先放到WDataReg[]数组中，然后给控制器发送16指令，将这些数据写给控制器,如果没有则不执行
-                // {                                                           //RTU
-                //     TXBuff_Rs458B[0] = SlaverID;                            //控制器通讯地址
-                //     TXBuff_Rs458B[1] = 0x10;                                //这里需要注意，控制器支不支持0x10指令，如果不支持，则需要通过0x06将多个数据多次发送
-                //     TXBuff_Rs458B[2] = WriteDatStAdd / 0x100;               //给控制器写的起始地址高8位
-                //     TXBuff_Rs458B[3] = WriteDatStAdd % 0x100;               //给控制器写的起始地址低8位
-                //     TXBuff_Rs458B[4] = WriteDatLenth % 0x100;               //给控制器写的数据个数高8位
-                //     TXBuff_Rs458B[5] = WriteDatLenth % 0x100;               //给控制器写的数据个数低8位
-                //     TXBuff_Rs458B[6] = WriteByteNum;                        //给控制器写的数据的总字节数
-                //     for (k = 0; k < WriteDatLenth; k++)                     //每个写的数据占两个字节
-                //     {
-                //         WDataReg[WriteDatStAdd + k] = ATOHInt(port->rx_buf[i + 21 + k * 4], port->rx_buf[i + 22 + k * 4], port->rx_buf[i + 23 + k * 4], port->rx_buf[i + 24 + k * 4]);
-                //         TXBuff_Rs458B[7 + k * 2] = WDataReg[WriteDatStAdd + k] / 0x100;
-                //         TXBuff_Rs458B[8 + k * 2] = WDataReg[WriteDatStAdd + k] % 0x100;
-                //     }
-                //     crc = CRC(TXBuff_Rs458B, 7 + k * 2);    //CRC校验，7+k*2是校验的长度
-                //     TXBuff_Rs458B[7 + k * 2] = crc / 0x100; //校验值高8位
-                //     TXBuff_Rs458B[8 + k * 2] = crc % 0x100; //校验值低8位
-                //     sendLenth = 9 + k * 2                   //发送的总字节数
-
-                //                         SentB(TXBuff_Rs458B, sendLenth);
-                //     memset(TXBuff_Rs458B, '\0', sizeof(TXBuff_Rs458B)); //清空RS485B发送缓存
-            }
-
-            memset(port->rx_buf, 0, MAX_BUF_LENGTH);
-            port->CanRecv = MAX_BUF_LENGTH;
-        }
-        else
-        {
-            // RTU 口收到数据
-        }
-    }
-}
+extern void serial_thread_entry(void *parameter);
 
 int init_ser_ports()
 {
@@ -543,13 +503,14 @@ int init_ser_ports()
     char uart_name[RT_NAME_MAX];
 
     struct serial_configure temp_config = RT_SERIAL_CONFIG_DEFAULT;
-    
+
     cJSON *ports;
     cJSON *port, *tempObj;
 
     ports = cJSON_GetObjectItem(g_root, "ports");
     int iArrayCnt = cJSON_GetArraySize(ports);
     log_d("iArrayCnt:%d", iArrayCnt);
+
 
     for (int i = 0; i < iArrayCnt; i++)
     {
@@ -561,7 +522,7 @@ int init_ser_ports()
 
         log_d("default:g_stConfig.serPort[%d].dev_name %s", i, g_stConfig.serPort[i].dev_name);
         log_d("---get name:%s type:%d value:%s", tempObj->string, tempObj->type, tempObj->valuestring);
-        
+
         rt_memset(g_stConfig.serPort[i].dev_name, '\0', 6);
         rt_strncpy(g_stConfig.serPort[i].dev_name, tempObj->valuestring, rt_strlen(tempObj->valuestring));
         log_d("new:g_stConfig.serPort[%d].dev_name %s", i, g_stConfig.serPort[i].dev_name);
@@ -625,58 +586,47 @@ int init_ser_ports()
         // char str[]="hello";
         // rt_device_write(serial, 0, str, (sizeof(str) - 1));
 
+        /* 设置接收回调函数 */
+        rt_device_set_rx_indicate(g_stConfig.serPort[i].device, uart_rx_ind);
+
+        /* 初始化信号量 */
+        char sem_name[10] = {'\0'};
+        sprintf(sem_name, "rx_%s", g_stConfig.serPort[i].dev_name);
+        rt_sem_init(&g_stConfig.serPort[i].rx_sem, sem_name, 0, RT_IPC_FLAG_FIFO);
+
+        /* Interrupt RX */
+        ret = rt_device_open(g_stConfig.serPort[i].device, RT_DEVICE_FLAG_INT_RX);
+        RT_ASSERT(ret == RT_EOK);
+
+        memset(g_stConfig.serPort[i].rx_buf, 0, MAX_BUF_LENGTH);
+        g_stConfig.serPort[i].CanRecv = MAX_BUF_LENGTH;
+
         char thread_name[10] = {'\0'};
-        // 如果是 ascii 端口则需要通中断方式来获取数据
-        if (!rt_strcmp(g_stConfig.serPort[i].prot, "ascii"))
+
+        sprintf(thread_name, "th_%s", g_stConfig.serPort[i].dev_name);
+        /* 创建 serial 线程 */
+        rt_thread_t thread = rt_thread_create(thread_name, (void (*)(void *parameter))serial_thread_entry, (void *)i, 1024, 25, 10);
+        /* 创建成功则启动线程 */
+        if (thread != RT_NULL)
         {
-            /* 设置接收回调函数 */
-            rt_device_set_rx_indicate(g_stConfig.serPort[i].device, uart_rx_ind);
-
-            /* 初始化信号量 */
-            char sem_name[10] = {'\0'};
-            sprintf(sem_name, "rx_%s", g_stConfig.serPort[i].dev_name);
-            rt_sem_init(&g_stConfig.serPort[i].rx_sem, sem_name, 0, RT_IPC_FLAG_FIFO);
-
-            /* Interrupt RX */
-            ret = rt_device_open(g_stConfig.serPort[i].device, RT_DEVICE_FLAG_INT_RX);
-            RT_ASSERT(ret == RT_EOK);
-
-            memset(g_stConfig.serPort[i].rx_buf, 0, MAX_BUF_LENGTH);
-
-            g_stConfig.serPort[i].CanRecv = MAX_BUF_LENGTH;
-
-            sprintf(thread_name, "th_%s", g_stConfig.serPort[i].dev_name);
-            /* 创建 serial 线程 */
-            rt_thread_t thread = rt_thread_create(thread_name, (void (*)(void *parameter))serial_thread_entry, (void *)i, 1024, 25, 10);
-            /* 创建成功则启动线程 */
-            if (thread != RT_NULL)
-            {
-                rt_thread_startup(thread);
-            }
-            else
-            {
-                ret = RT_ERROR;
-                ret = rt_device_close(g_stConfig.serPort[i].device);
-
-                goto exit;
-            }
+            rt_thread_startup(thread);
         }
         else
         {
-            sprintf(thread_name, "mbp_%s", g_stConfig.serPort[i].dev_name);
-            LOG_D("This port (%s) is rtu,will as rtu master", g_stConfig.serPort[i].dev_name);
-            rt_thread_t thread_mbpoll = rt_thread_create(thread_name, (void (*)(void *parameter))mbpoll_thread_entry, (void *)i, 1024, MB_POLL_THREAD_PRIORITY, 10);
-            if (thread_mbpoll != RT_NULL)
-            {
-                rt_thread_startup(thread_mbpoll);
-            }
+            ret = RT_ERROR;
+            ret = rt_device_close(g_stConfig.serPort[i].device);
+            goto exit;
+        };
 
-            // 轮询数据线程
-            rt_thread_t thread_mbsend = rt_thread_create("md_m_send", send_thread_entry, RT_NULL, 512, MB_SEND_THREAD_PRIORITY, 10);
-            if (thread_mbsend != RT_NULL)
-            {
-                rt_thread_startup(thread_mbsend);
-            }
+        // 如果是 ascii 端口则需要通中断方式来获取数据
+        if (!rt_strcmp(g_stConfig.serPort[i].prot, "ascii"))
+        {
+
+        }
+        else
+        {
+   
+
         }
     }
 

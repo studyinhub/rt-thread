@@ -46,7 +46,7 @@ void build_config_factory_json()
 {
     g_root = cJSON_CreateObject(); //创建一个json对象
 
-    cJSON_AddItemToObject(g_root, "lastConfitAt", cJSON_CreateString("2022-02-14 17:00:00"));
+    cJSON_AddItemToObject(g_root, "lastConfigAt", cJSON_CreateString("2022-02-14 17:00:00"));
     cJSON_AddItemToObject(g_root, "masterID", cJSON_CreateNumber(1));
 
     cJSON *Array_baud;
@@ -196,47 +196,46 @@ int switch_root(char *path)
 int load_config()
 {
     // V1 判断 ram 中是否有 config.json,如果有，就将 webnet 设置在 ram，否则设置在 flash
-    // V2 不在通过判断 config.json 是否存在，通过 flash 中的 webnet_in_ram 来判断
+    // V2 不再通过判断 config.json 是否存在，通过 flash 中的 webnet_in_ram 来判断，是否将 flash 中的 webnet 复制到 ram
 
     char path[50];
     int iConfigJsonSize = 0;
+    int fd = 0;
 
-    rt_bool_t webnet_in_ram_last = webnet_in_ram;
+    int config_from =0; // 1:flash 0:ram
+    cJSON *item = NULL;
+
+    // 给 WEB_ROOT 赋一个初值
+    rt_sprintf(WEB_ROOT, "%s", "/mnt/filesystem/webnet");
+
+    // build_config_factory_json();
+
+    // 首先判断 ram 中是否已有配置文件，如果有就以 RAM 中的为准，如果没有就从 flash 中拷贝
     rt_sprintf(path, "%s", "/webnet/config.json");
-    int fd = open(path, O_RDONLY);
-    if (fd < 0)
+    fd = open(path, O_RDONLY);
+    if (fd > 0)
     {
+        log_i("从 RAM 中读取 config.json");
+        config_from = 0;
+    }
+    else
+    {
+        log_i("从 FLASH 中读取 config.json");
         rt_sprintf(path, "%s", "/mnt/filesystem/webnet/config.json");
         fd = open(path, O_RDONLY);
         if (fd < 0)
         {
-            log_e("在 RAM 和 FLASH 总都没有找到配置文件");
+            // 说明 flash 中没有 config 文件
+            log_e("在 FLASH 中没有找到配置文件");
             return -1;
         }
-        log_i("从 FLASH 加载配置文件");
-        webnet_in_ram = RT_FALSE;
-        rt_sprintf(WEB_ROOT, "%s", "/mnt/filesystem/webnet");
-        system("cp /mnt/filesystem/webnet/ /webnet/");
-    }
-    else
-    {
-        log_i("从 RAM 加载配置文件");
-        // 将 flash 中的 网页文件复制到 ram 中
-
-        webnet_in_ram = RT_TRUE;
-        rt_sprintf(WEB_ROOT, "%s", "/webnet");
-    }
-    log_d("webnet_in_ram:%d", webnet_in_ram);
-
-    // 如果配置发生了改变，那么就要切换
-    if (webnet_in_ram_last != webnet_in_ram)
-    {
-        switch_root(WEB_ROOT);
+        config_from = 1;
+        
     }
 
-    // build_config_factory_json();
     iConfigJsonSize = read(fd, g_BUF_CONFIG_JSON, MAX_CONFIG_JSON_SIZE);
     close(fd);
+
     if (iConfigJsonSize > MAX_CONFIG_JSON_SIZE)
     {
         log_e("Config file is too large");
@@ -259,16 +258,30 @@ int load_config()
         log_e("parse config.json error");
         return -1;
     }
-
     log_d("formated config.json print:%s", cJSON_Print(g_root));
+
     // log_d("unformated config.json print:%s", cJSON_PrintUnformatted(g_root));
     // printJSON(g_root);
 
-    // 获取到配置文件的 json 对象后
-    cJSON *item = NULL;
-    item = cJSON_GetObjectItem(g_root, "masterID");
-    log_d("get masterID:%d", item->valueint);
-
+    // 如果是从 flash 中读取的 config.json 那么说明，是第一次上电，需要复制到 ram
+    if(config_from)
+    {
+        // 获取到配置文件的 json 对象后
+        item = cJSON_GetObjectItem(g_root, "webnet_in_ram");
+        log_d("webnet_in_ram:%d", item->valueint);
+        if (item->valueint)
+        {
+            webnet_in_ram = RT_TRUE;
+            log_w("开始复制 flash 中的 webnet 到 ram");
+            system("cp /mnt/filesystem/webnet/ /webnet/");
+            rt_sprintf(WEB_ROOT, "%s", "/webnet");
+        }
+        else
+        {
+            webnet_in_ram = RT_FALSE;
+            rt_sprintf(WEB_ROOT, "%s", "/mnt/filesystem/webnet");
+        }
+    }
 }
 
 int config_load(int argc, char **argv)

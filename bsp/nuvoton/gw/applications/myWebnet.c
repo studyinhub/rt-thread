@@ -8,7 +8,6 @@
 #define LOG_LVL LOG_LVL_DBG
 #include <ulog.h>
 
-
 // char *init_wb_dirs[] =
 // {
 //     WEB_ROOT,
@@ -25,7 +24,6 @@ char WEB_ROOT[128];
 char buildtime[20];
 
 rt_thread_t g_tftp_tid;
-
 
 char init_wb_dirs[NUMBER_OF_STRING][MAX_STRING_SIZE] =
     {
@@ -55,27 +53,26 @@ static void tftp_server_thread(void *param)
 
 int init_tftps(char *root_path)
 {
-        LOG_I("启动 tftp server:%s",root_path);
-        tftp_server = tftp_server_create(root_path, 69);
-        if(!tftp_server)
-        {
-            log_e("创建 tftp_server 失败");
-            return -1;
-        }
-        tftp_server_write_set(tftp_server, 1);
+    LOG_I("启动 tftp server:%s", root_path);
+    tftp_server = tftp_server_create(root_path, 69);
+    if (!tftp_server)
+    {
+        log_e("创建 tftp_server 失败");
+        return -1;
+    }
+    tftp_server_write_set(tftp_server, 1);
 
-        g_tftp_tid = rt_thread_create("tftps", tftp_server_thread, tftp_server, 2048, 18, 20);
-        if (g_tftp_tid == NULL)
-        {
-           LOG_E("create tftps thread faild");
-        }
-        if(rt_thread_startup(g_tftp_tid) == RT_EOK)
-        {
-            LOG_I("tftps Thread 启动成功");
-        }
-        LOG_D("tftp_server->is_stop:%d",tftp_server->is_stop);
+    g_tftp_tid = rt_thread_create("tftps", tftp_server_thread, tftp_server, 2048, 18, 20);
+    if (g_tftp_tid == NULL)
+    {
+        LOG_E("create tftps thread faild");
+    }
+    if (rt_thread_startup(g_tftp_tid) == RT_EOK)
+    {
+        LOG_I("tftps Thread 启动成功");
+    }
+    LOG_D("tftp_server->is_stop:%d", tftp_server->is_stop);
 }
-
 
 void asp_var_version(struct webnet_session *session)
 {
@@ -115,7 +112,7 @@ void cgi_calc_handler(struct webnet_session *session)
     /* set http header */
     session->request->result_code = 200;
     webnet_session_set_header(session, mimetype, 200, "Ok", -1);
-    
+
     webnet_session_write(session, (const rt_uint8_t *)header, rt_strlen(header));
     if (request->query_counter)
     {
@@ -167,12 +164,10 @@ void cgi_getconfig_handler(struct webnet_session *session)
 
     /* get mimetype */
     mimetype = mime_get_type(".html");
-    system("ls /webnet");
     load_config();
-    system("ls /webnet");
 
-    cJSON_AddItemToObject(g_root, "webnet_in_ram", cJSON_CreateBool(webnet_in_ram));
-    cJSON_AddItemToObject(g_root, "web_root", cJSON_CreateString(WEB_ROOT));
+    // cJSON_AddItemToObject(g_root, "webnet_in_ram", cJSON_CreateBool(webnet_in_ram));
+    // cJSON_AddItemToObject(g_root, "web_root", cJSON_CreateString(WEB_ROOT));
     rt_sprintf(g_BUF_CONFIG_JSON, "%s", cJSON_Print(g_root));
 
     /* set http header */
@@ -198,9 +193,7 @@ void cgi_putconfig_handler(struct webnet_session *session)
 
     request = session->request;
     log_d("query_counter:%d", request->query_counter);
-
     log_d("session->buffer:%s", session->buffer);
-
 
     const char *port1_baudrate, *name;
     port1_baudrate = webnet_request_get_query(request, "ports[1][baud_rate]");
@@ -208,10 +201,9 @@ void cgi_putconfig_handler(struct webnet_session *session)
     log_d("port1_baudrate:%s", port1_baudrate);
 
     print_time();
-    cJSON_ReplaceItemInObject(g_root, "lastConfitAt", cJSON_CreateString(g_FmtTimeStr));
-
+    cJSON_ReplaceItemInObject(g_root, "lastConfigAt", cJSON_CreateString(g_FmtTimeStr));
     cJSON *pPorts;
-
+    
     pPorts = cJSON_GetObjectItem(g_root, "ports");
     // printJSON(pPorts);
 
@@ -222,33 +214,41 @@ void cgi_putconfig_handler(struct webnet_session *session)
     printJSON(g_root);
 
     char path[50];
-    rt_sprintf(path, "%s%s",WEB_ROOT, "/config.json");
-    save_config(path, g_root);
+    rt_bool_t bSync2Flash = RT_FALSE;
+    cJSON *item = NULL;
+    item = cJSON_GetObjectItem(g_root, "sync2flash");
+    bSync2Flash = item->valueint;
+    log_w("bSync2Flash:%d", bSync2Flash);
+    if (bSync2Flash)
+    {
+        log_i("保存到 flash");
+        rt_sprintf(path, "%s%s", "/mnt/filesystem/webnet/", "/config.json");
+    }else
+    {   
+        log_i("保存到 ram");
+        rt_sprintf(path, "%s", "/webnet/config.json");
+    }
 
-    // 是否保存到 flash，如果需要就取消注释
-    rt_sprintf(path, "%s%s","/mnt/filesystem/webnet/", "/config.json");
-    save_config(path,g_root);
+    save_config(path, g_root);
 
     // cJSON_SetValuestring(g_root,"")
     static const char *status = "ok";
     session->request->result_code = 200;
     webnet_session_set_header(session, mimetype, 200, status, strlen(status));
     webnet_session_write(session, (const rt_uint8_t *)status, rt_strlen(status));
-    
 }
-
 
 int chg_root(int argc, char **argv)
 {
     char path[50];
 
-    if (!strcmp(argv[1], "ram"))
+    if (!strcmp(argv[1], "flash"))
     {
-        rt_sprintf(path, "%s", "/webnet");
+        rt_sprintf(path, "%s", "/mnt/filesystem/webnet");
     }
     else
     {
-        rt_sprintf(path, "%s", "/mnt/filesystem/webnet");
+        rt_sprintf(path, "%s", "/webnet");
     }
     system("cp /mnt/filesystem/webnet/ /webnet/");
 
@@ -257,8 +257,7 @@ int chg_root(int argc, char **argv)
 
 MSH_CMD_EXPORT(chg_root, modify webnet root dir);
 
-
-static void success(char *errMsg,char*data)
+static void success(char *errMsg, char *data)
 {
     // {
     //  "errMsg:":"ok",
@@ -266,8 +265,6 @@ static void success(char *errMsg,char*data)
     // }
 
     cJSON *root;
-
-
 }
 
 void cgi_chgroot_handler(struct webnet_session *session)
@@ -287,34 +284,23 @@ void cgi_chgroot_handler(struct webnet_session *session)
 
     log_d("session->buffer:%s", session->buffer);
 
-    if(request->query_counter)
+    if (request->query_counter)
     {
         const char *path;
         path = webnet_request_get_query(request, "path");
-        log_d("path:%s",path);
-
-        if(webnet_in_ram)
-        {
-            system("chg_root");
-            webnet_in_ram = RT_FALSE;
-        }else
-        {
-            system("chg_root ram");
-            webnet_in_ram = RT_TRUE;
-        }
-
+        log_d("path:%s", path);
+        system("chg_root flash");
     }
     static const char *status = "ok";
     session->request->result_code = 200;
     webnet_session_set_header(session, mimetype, 200, status, strlen(status));
     webnet_session_write(session, (const rt_uint8_t *)status, rt_strlen(status));
-
 }
 
 int init_webnet(char *root_path)
 {
 
-    log_d("root_path:%s",root_path);
+    log_d("init_webnet root_path:%s", root_path);
     make_root_dirs();
     webnet_set_root(root_path);
 

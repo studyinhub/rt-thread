@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="KyKqUE1w_Dh2jLFXQ3_e" name="Page-1">
-        <mxGraphModel dx="2327" dy="1634" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#999999" math="0" shadow="0">
+        <mxGraphModel dx="1993" dy="1354" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#999999" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -97,42 +97,139 @@
         </mxGraphModel>
     </diagram>
     <diagram id="T2HKSGH3ElPu9H5HbvxF" name="流程">
-        <mxGraphModel dx="1158" dy="807" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#666666" math="0" shadow="1">
+        <mxGraphModel dx="824" dy="527" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#666666" math="0" shadow="1">
             <root>
                 <mxCell id="eWpMVi4Oahc1egA4uQdr-0"/>
                 <mxCell id="eWpMVi4Oahc1egA4uQdr-1" parent="eWpMVi4Oahc1egA4uQdr-0"/>
                 <mxCell id="eWpMVi4Oahc1egA4uQdr-2" value="board_init()&lt;br&gt;驱动初始化&lt;br&gt;初始化 tftp&amp;nbsp;&lt;br&gt;初始化 webnet&amp;nbsp;&lt;br&gt;加载配置文件&lt;br&gt;/mnt/filesystem/webnet/config.json&lt;br&gt;初始化串口" style="whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="eWpMVi4Oahc1egA4uQdr-1" vertex="1">
                     <mxGeometry x="90" y="100" width="320" height="240" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-2" value="" style="edgeStyle=none;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-0" target="FzaBIZgUE-1zPihTqksD-1">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-2" value="" style="edgeStyle=none;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-0" target="FzaBIZgUE-1zPihTqksD-1" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-0" value="加载配置文件" style="whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-0" value="加载配置文件" style="whiteSpace=wrap;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" vertex="1">
                     <mxGeometry x="600" y="110" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-4" value="" style="edgeStyle=none;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-1" target="FzaBIZgUE-1zPihTqksD-3">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-4" value="" style="edgeStyle=none;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-1" target="FzaBIZgUE-1zPihTqksD-3" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-6" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-1" target="FzaBIZgUE-1zPihTqksD-5">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-6" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-1" target="FzaBIZgUE-1zPihTqksD-5" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-1" value="是否运行在 RAM" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-1" value="是否运行在 RAM" style="rhombus;whiteSpace=wrap;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" vertex="1">
                     <mxGeometry x="565" y="240" width="190" height="80" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-8" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-3" target="FzaBIZgUE-1zPihTqksD-7">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-8" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-3" target="FzaBIZgUE-1zPihTqksD-7" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-3" value="构建 cJSON 的默认配置" style="whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-3" value="构建 cJSON 的默认配置" style="whiteSpace=wrap;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" vertex="1">
                     <mxGeometry x="600" y="410" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-9" style="edgeStyle=orthogonalEdgeStyle;html=1;" edge="1" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-5" target="FzaBIZgUE-1zPihTqksD-7">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-9" style="edgeStyle=orthogonalEdgeStyle;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" source="FzaBIZgUE-1zPihTqksD-5" target="FzaBIZgUE-1zPihTqksD-7" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-5" value="从 文件系统读取 json 文件，并转换为 cJSON" style="whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-5" value="从 文件系统读取 json 文件，并转换为 cJSON" style="whiteSpace=wrap;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" vertex="1">
                     <mxGeometry x="850" y="414" width="120" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="FzaBIZgUE-1zPihTqksD-7" value="将 cJSON 配置，进行解析，提取初始化串口需要的结构体" style="whiteSpace=wrap;html=1;" vertex="1" parent="eWpMVi4Oahc1egA4uQdr-1">
+                <mxCell id="FzaBIZgUE-1zPihTqksD-7" value="将 cJSON 配置，进行解析，提取初始化串口需要的结构体" style="whiteSpace=wrap;html=1;" parent="eWpMVi4Oahc1egA4uQdr-1" vertex="1">
                     <mxGeometry x="565" y="520" width="430" height="100" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="-kQM7N_BB22ndV1gLLh4" name="解析">
+        <mxGraphModel dx="1138" dy="706" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-0"/>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-1" parent="BS0stS9mOeBj5WG7hI_J-0"/>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-5" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-3" target="BS0stS9mOeBj5WG7hI_J-4">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-3" value="ASCII Client" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="100" y="30" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-7" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-4" target="BS0stS9mOeBj5WG7hI_J-6">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-4" value="串口接收中断" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="375" y="30" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-9" value="" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-6" target="BS0stS9mOeBj5WG7hI_J-8">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-10" value="否" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="BS0stS9mOeBj5WG7hI_J-9">
+                    <mxGeometry x="-0.3333" y="1" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-14" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-6" target="BS0stS9mOeBj5WG7hI_J-13">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-16" value="是" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="BS0stS9mOeBj5WG7hI_J-14">
+                    <mxGeometry x="-0.1429" y="1" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-6" value="判断是否有 17 指令未回应&lt;br&gt;is_combo_run = 1 ?" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="330" y="170" width="210" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-12" style="edgeStyle=none;html=1;entryX=0;entryY=0.75;entryDx=0;entryDy=0;dashed=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-8" target="BS0stS9mOeBj5WG7hI_J-11">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-8" value="给解析线程发送消息，立即开始解析" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="590" y="50" width="270" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-18" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-11" target="BS0stS9mOeBj5WG7hI_J-17">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-11" value="对 ASCII 帧进行解析" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="1120" y="30" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-13" value="将数据帧推入到 Ringbuffer FIFO，等待 17 上一条指令处理完成或者超时" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="375" y="360" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-20" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-17" target="BS0stS9mOeBj5WG7hI_J-19">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-24" value="是" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="BS0stS9mOeBj5WG7hI_J-20">
+                    <mxGeometry x="-0.1778" y="1" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-22" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-17" target="BS0stS9mOeBj5WG7hI_J-21">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-23" value="否" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="BS0stS9mOeBj5WG7hI_J-22">
+                    <mxGeometry x="-0.0909" y="-2" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-17" value="判断是否是 17h 指令，设置" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="1090" y="140" width="180" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-26" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-19" target="BS0stS9mOeBj5WG7hI_J-25">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-19" value="&lt;span&gt;is_combo_run = 1&lt;br&gt;需要拆分为 03 h 和 10 h 请求&lt;br&gt;&lt;/span&gt;" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="1120" y="310" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-21" value="03，06，10 指令 直接 构造 03，06，10 RTU 请求" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="1440" y="150" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-28" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-25" target="BS0stS9mOeBj5WG7hI_J-27">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-25" value="send 03 h&lt;br&gt;wait 03h response" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="1120" y="414" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-30" value="" style="edgeStyle=none;html=1;" edge="1" parent="BS0stS9mOeBj5WG7hI_J-1" source="BS0stS9mOeBj5WG7hI_J-27" target="BS0stS9mOeBj5WG7hI_J-29">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-27" value="10h&lt;br&gt;wait 10h response" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="1120" y="500" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="BS0stS9mOeBj5WG7hI_J-29" value="组合 03h 和 10h 的响应&lt;br&gt;response ASCII&lt;br&gt;is_combo_run = 0" style="whiteSpace=wrap;html=1;" vertex="1" parent="BS0stS9mOeBj5WG7hI_J-1">
+                    <mxGeometry x="1120" y="600" width="120" height="60" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>

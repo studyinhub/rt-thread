@@ -27,6 +27,8 @@
 
 #include "config.h"
 #include "modbus_x.h"
+#include "myThreads.h"
+
 
 #ifdef LOG_TAG
 #undef LOG_TAG
@@ -116,9 +118,9 @@ int main(int argc, char **argv)
     sprintf(buildtime,"%s",BUILDTIME);
     printVersion();
     set_date_time();
-    
     load_config();
 
+    threads_init();
     init_ser_ports();
 
     enable_wdt();
