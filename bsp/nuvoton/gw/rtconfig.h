@@ -487,7 +487,6 @@
 #define BSP_USING_UART8
 #define BSP_USING_SDH
 #define NU_SDH_HOTPLUG
-#define BSP_USING_CAN
 #define BSP_USING_SPI
 #define BSP_USING_SPI_PDMA
 #define BSP_USING_SPI0

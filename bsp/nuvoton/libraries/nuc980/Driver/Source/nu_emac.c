@@ -175,6 +175,8 @@ void EMAC_PhyInit(EMAC_T *EMAC)
     uint32_t reg;
     uint32_t i = 0UL;
 
+    rt_kprintf("EMAC_PhyInit!!!!!!!!\n");
+
     /* Reset Phy Chip */
     EMAC_MdioWrite(EMAC, PHY_CNTL_REG, EMAC_PHY_ADDR, PHY_CNTL_RESET_PHY);
 

@@ -67,7 +67,7 @@
 #define FINSH_HISTORY_LINES 5
 #define FINSH_USING_SYMTAB
 #define FINSH_USING_DESCRIPTION
-#define FINSH_THREAD_PRIORITY 20
+#define FINSH_THREAD_PRIORITY 5
 #define FINSH_THREAD_STACK_SIZE 4096
 #define FINSH_CMD_SIZE 80
 #define FINSH_USING_MSH
@@ -228,6 +228,7 @@
 #define RT_LWIP_ETHTHREAD_PRIORITY 12
 #define RT_LWIP_ETHTHREAD_STACKSIZE 1024
 #define RT_LWIP_ETHTHREAD_MBOX_SIZE 32
+#define RT_LWIP_REASSEMBLY_FRAG
 #define LWIP_NETIF_STATUS_CALLBACK 1
 #define LWIP_NETIF_LINK_CALLBACK 1
 #define SO_REUSE 1
@@ -239,6 +240,9 @@
 #define LWIP_NETIF_LOOPBACK 1
 #define RT_LWIP_STATS
 #define RT_LWIP_USING_PING
+#define RT_LWIP_DEBUG
+#define RT_LWIP_NETIF_DEBUG
+#define RT_LWIP_DHCP_DEBUG
 
 /* AT commands */
 
@@ -293,6 +297,12 @@
 
 /* LVGL: powerful and easy-to-use embedded GUI library */
 
+#define PKG_USING_WAVPLAYER
+#define PKG_WP_USING_PLAY
+#define PKG_WP_PLAY_DEVICE "sound0"
+#define PKG_WP_USING_RECORD
+#define PKG_WP_RECORD_DEVICE "sound0"
+#define PKG_USING_WAVPLAYER_LATEST_VERSION
 
 /* u8g2: a monochrome graphic library */
 
@@ -305,6 +315,9 @@
 /* system packages */
 
 /* acceleration: Assembly language or algorithmic acceleration packages */
+
+
+/* CMSIS: ARM Cortex-M Microcontroller Software Interface Standard */
 
 
 /* Micrium: Micrium software products porting for RT-Thread */
@@ -394,8 +407,6 @@
 #define BSP_USING_QSPI0_PDMA
 #define BSP_USING_CRYPTO
 #define BSP_USING_WDT
-#define BSP_USING_USBD
-#define BSP_USING_USBH
 
 /* On-board Peripheral Drivers */
 
@@ -404,8 +415,6 @@
 #define BOARD_USING_NAU8822
 #define BOARD_USING_STORAGE_SDCARD
 #define BOARD_USING_STORAGE_SPINAND
-#define BOARD_USING_USB0_DEVICE_HOST
-#define BOARD_USING_USB1_HOST
 
 /* Board extended module drivers */
 

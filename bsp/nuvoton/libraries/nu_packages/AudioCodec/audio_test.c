@@ -87,20 +87,23 @@ static int audio_test(int argc, char **argv)
 
 static int audio_overnight(int argc, char **argv)
 {
-#define DEF_MAX_TEST_SECOND 5
+#define DEF_MAX_TEST_SECOND 10
 
     struct wavrecord_info info;
     char strbuf[128];
     struct stat stat_buf;
 
     snprintf(strbuf, sizeof(strbuf), "/test.wav");
+    int count = 0;
     while (1)
     {
-        rt_kprintf("Recording file at %s\n", strbuf);
+        count++;
+        rt_kprintf("Recording file at %s at %d \n", strbuf,count);
         info.uri = strbuf;
         info.samplerate = 16000;
         info.samplebits = 16;
         info.channels = 2;
+
         wavrecorder_start(&info);
         rt_thread_mdelay(DEF_MAX_TEST_SECOND * 1000);
         wavrecorder_stop();
@@ -111,7 +114,6 @@ static int audio_overnight(int argc, char **argv)
             rt_kprintf("%s non-exist.\n", strbuf);
             break;
         }
-
         rt_kprintf("Replay file at %s\n", strbuf);
         wavplayer_play(strbuf);
         rt_thread_mdelay(DEF_MAX_TEST_SECOND * 1000);
