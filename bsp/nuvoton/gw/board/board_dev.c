@@ -20,8 +20,6 @@
 #include "cJSON.h"
 #include "config.h"
 
-
-
 #if defined(BOARD_USING_STORAGE_SPINAND) && defined(NU_PKG_USING_SPINAND)
 
 #include "drv_qspi.h"
@@ -34,28 +32,26 @@
 // 24 个 block 是 3072k  3MB
 // nand0 3MB 基本上存储的都是系统的 spl uboot app env，这些，所以 nand0 不要存入用户数据，这部分占用的是 3MB 之前的数据，给 app 留了 1MB 的空间
 // nand1 的空间是 128-3 = 125MB， 起始地址是 0x300000 ,如果在这个位置烧写用户数据会怎么样，那么用到的文件系统是 uffs，如何生成 uffs 的 image 呢？
-
 // nand2 是整个分区，128MB，
-struct rt_mtd_nand_device mtd_partitions[MTD_SPINAND_PARTITION_NUM] =
-    {
-        [0] =
-            {
-                .block_start = 0,
-                .block_end = 23,
-                .block_total = 24,
-            },
-        [1] =
-            {
-                .block_start = 24,
-                .block_end = 1023,
-                .block_total = 1000,
-            },
-        [2] =
-            {
-                .block_start = 0,
-                .block_end = 1023,
-                .block_total = 1024,
-            }};
+struct rt_mtd_nand_device mtd_partitions[MTD_SPINAND_PARTITION_NUM] = {
+    [0] =
+        {
+            .block_start = 0,
+            .block_end = 25,
+            .block_total = 26,
+        },
+    [1] =
+        {
+            .block_start = 26,
+            .block_end = 1023,
+            .block_total = 998,
+        },
+    [2] =
+        {
+            .block_start = 0,
+            .block_end = 1023,
+            .block_total = 1024,
+        }};
 
 static int rt_hw_spinand_init(void)
 {
@@ -180,7 +176,6 @@ static char uart_get_char(rt_device_t serial_device, rt_sem_t rx_sem)
 
 #define DATA_CMD_END '\n' /* 结束位设置为 \r，即回车符 */
 
-
 // int read_parse_config()
 // {
 //     int fd, size;
@@ -226,8 +221,6 @@ static char uart_get_char(rt_device_t serial_device, rt_sem_t rx_sem)
 //         log_d("get masterID:%d", item->valueint);
 //     }
 // }
-
-
 
 #endif //#defined(BOARD_USING_UART1_RS232)
 
@@ -377,7 +370,7 @@ int board_init(void)
     led_2 = easyblink_init_led(LED_2, PIN_LOW);
 
     easyblink(led_1, -1, 250, 500);
-    easyblink(led_2, 10, 250, 500);
+    easyblink(led_2, -1, 100, 200);
 
     rt_kprintf("Begin to init KEY!\n");
 
@@ -391,7 +384,6 @@ int board_init(void)
     // 读取 config.json 到 g_BUF_CONFIG_JSON
 
     // msh_exec("ls /mnt/filesystem/webnet",26);
-
 }
 
 // INIT_BOARD_EXPORT 这个不能用在这里初始化板子，会出问题,

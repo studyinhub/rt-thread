@@ -4,12 +4,12 @@
 #define APPNAME "gw"
 #define VER_AUTO 1
 #define VERSION "0.0.1"
-#define BUILDTIME "2022.02.24 16:52:47"
-#define BUILDTIMESTAMP 16456927673
+#define BUILDTIME "2022.03.08 14:19:14"
+#define BUILDTIMESTAMP 16467203543
 #define major 0
 #define minor 2022
-#define patch 0224
-#define build 165247
+#define patch 0308
+#define build 141914
 #include <stdio.h>
 
 void printVersion()

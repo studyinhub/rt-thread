@@ -1,0 +1,8 @@
+{
+    "description":"升级测试而已",
+    "format":".lzma",
+    "main":"\\aardio_tftpweb.exe",
+    "updater":"\\aardio_tftpweb.exe",
+    "url":"http://47.94.84.166:9000/images/",
+    "version":"0.0.0.10"
+}

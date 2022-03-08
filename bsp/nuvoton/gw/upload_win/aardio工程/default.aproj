@@ -1,0 +1,50 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<project ver="10" name="aardio工程" libEmbed="true" icon="..." ui="win" output="aardio工程.exe" CompanyName="单位名称" FileDescription="aardio工程" LegalCopyright="Copyright (C) 作者 2022" ProductName="aardio工程" InternalName="aardio工程" FileVersion="0.0.0.04" ProductVersion="0.0.0.04" publishDir="/dist/" dstrip="false" local="false" ignored="false">
+	<file name="main.aardio" path="main.aardio" comment="main.aardio"/>
+	<folder name="资源文件" path="res" embed="true" local="false" ignored="false">
+		<folder name="pack_src" path="res\pack_src" comment="res\pack_src" local="false" embed="false" ignored="false">
+			<file name="utils.cmd" path="res\pack_src\utils.cmd" comment="res\pack_src\utils.cmd"/>
+			<file name="test.txt" path="res\pack_src\test.txt" comment="res\pack_src\test.txt"/>
+			<file name="tftpweb.bat" path="res\pack_src\tftpweb.bat" comment="res\pack_src\tftpweb.bat"/>
+			<file name="tftpweb.ico" path="res\pack_src\tftpweb.ico" comment="res\pack_src\tftpweb.ico"/>
+			<folder name="webnet" path="res\pack_src\webnet" comment="res\pack_src\webnet">
+				<file name="favicon.ico" path="res\pack_src\webnet\favicon.ico" comment="res\pack_src\webnet\favicon.ico"/>
+				<file name="index.html" path="res\pack_src\webnet\index.html" comment="res\pack_src\webnet\index.html"/>
+				<file name="help.shtml" path="res\pack_src\webnet\help.shtml" comment="res\pack_src\webnet\help.shtml"/>
+				<file name="index.shtml" path="res\pack_src\webnet\index.shtml" comment="res\pack_src\webnet\index.shtml"/>
+				<file name="config.json" path="res\pack_src\webnet\config.json" comment="res\pack_src\webnet\config.json"/>
+				<file name="top.html" path="res\pack_src\webnet\top.html" comment="res\pack_src\webnet\top.html"/>
+				<file name="login.html" path="res\pack_src\webnet\login.html" comment="res\pack_src\webnet\login.html"/>
+				<file name="about.asp" path="res\pack_src\webnet\about.asp" comment="res\pack_src\webnet\about.asp"/>
+				<file name="config.html" path="res\pack_src\webnet\config.html" comment="res\pack_src\webnet\config.html"/>
+				<file name="footer.html" path="res\pack_src\webnet\footer.html" comment="res\pack_src\webnet\footer.html"/>
+				<folder name="css" path="res\pack_src\webnet\css" comment="res\pack_src\webnet\css">
+					<file name="toast.style.css" path="res\pack_src\webnet\css\toast.style.css" comment="res\pack_src\webnet\css\toast.style.css"/>
+					<file name="pure-min.css" path="res\pack_src\webnet\css\pure-min.css" comment="res\pack_src\webnet\css\pure-min.css"/>
+					<file name="toast.style.min.css" path="res\pack_src\webnet\css\toast.style.min.css" comment="res\pack_src\webnet\css\toast.style.min.css"/>
+					<file name="base.css" path="res\pack_src\webnet\css\base.css" comment="res\pack_src\webnet\css\base.css"/>
+				</folder>
+				<folder name="js" path="res\pack_src\webnet\js" comment="res\pack_src\webnet\js">
+					<file name="test.js" path="res\pack_src\webnet\js\test.js" comment="res\pack_src\webnet\js\test.js"/>
+					<file name="jquery-3.5.1.min.js" path="res\pack_src\webnet\js\jquery-3.5.1.min.js" comment="res\pack_src\webnet\js\jquery-3.5.1.min.js"/>
+					<file name="jquery-1.11.0.min.js" path="res\pack_src\webnet\js\jquery-1.11.0.min.js" comment="res\pack_src\webnet\js\jquery-1.11.0.min.js"/>
+					<file name="toast.script.js" path="res\pack_src\webnet\js\toast.script.js" comment="res\pack_src\webnet\js\toast.script.js"/>
+				</folder>
+				<folder name="admin" path="res\pack_src\webnet\admin" comment="res\pack_src\webnet\admin">
+					<file name="index.html" path="res\pack_src\webnet\admin\index.html" comment="res\pack_src\webnet\admin\index.html"/>
+				</folder>
+				<folder name="fonts" path="res\pack_src\webnet\fonts" comment="res\pack_src\webnet\fonts">
+					<file name="toast.ttf" path="res\pack_src\webnet\fonts\toast.ttf" comment="res\pack_src\webnet\fonts\toast.ttf"/>
+					<file name="toast.woff" path="res\pack_src\webnet\fonts\toast.woff" comment="res\pack_src\webnet\fonts\toast.woff"/>
+					<file name="toast.eot" path="res\pack_src\webnet\fonts\toast.eot" comment="res\pack_src\webnet\fonts\toast.eot"/>
+					<file name="toast.svg" path="res\pack_src\webnet\fonts\toast.svg" comment="res\pack_src\webnet\fonts\toast.svg"/>
+					<file name="selection.json" path="res\pack_src\webnet\fonts\selection.json" comment="res\pack_src\webnet\fonts\selection.json"/>
+				</folder>
+			</folder>
+		</folder>
+	</folder>
+	<folder name="批处理" path="bat" embed="true" comment="目录" local="false" ignored="false">
+		<file name="bat.aardio" path="bat\bat.aardio" comment="bat\bat.aardio"/>
+		<file name="bat2.aardio" path="bat\bat2.aardio" comment="bat\bat2.aardio"/>
+	</folder>
+</project>

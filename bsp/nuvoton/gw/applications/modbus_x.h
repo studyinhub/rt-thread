@@ -7,9 +7,6 @@
 #define SER_PORTS_CNT 3
 
 
-
-
-
 /* 串口接收消息结构*/
 struct rx_msg
 {

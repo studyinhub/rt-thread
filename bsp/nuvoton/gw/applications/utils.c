@@ -108,10 +108,11 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint8_t len)
 // Add up the byte number of the message consisting of 8 consecutive bits. The result except the carry (overflow) is converted to 2’s complement.
 // http://www.ip33.com/lrc.html
 // 如果内容本身是已经 ASCII 转换过后的 buf
+// 计算从 ： 之后的所有数据
 int HEX_LRC(uint8_t *buf, uint8_t len)
 {
     int result = 0;
-    // LOG_D("HEX_LRC:");
+    // log_d("HEX_LRC:");
     for (int i = 0; i < len; i++)
     {
         // rt_kprintf("%02x ", *(buf + i));
@@ -129,7 +130,7 @@ int ASCII_LRC(uint8_t *buf, uint8_t len)
     // 先要对 ASCII 转换为 16 进制
     // 必须是 2 的倍数
 
-    // LOG_D("ASCII_LRC(%d):", len);
+    // log_d("ASCII_LRC(%d):", len);
 
     // for (int j = 0; j < len; j++)
     // {
@@ -137,6 +138,7 @@ int ASCII_LRC(uint8_t *buf, uint8_t len)
     // }
     // rt_kprintf("\n");
 
+    
     if (len % 2 != 0)
     {
         LOG_W("len is not mod by 2,please check");
@@ -144,9 +146,9 @@ int ASCII_LRC(uint8_t *buf, uint8_t len)
     }
 
     uint8_t *hBuf;
-    uint8_t hLen = len / 2;
+    uint8_t hLen = len / 2; // len：整个 frame -1(:) - 4(lrc),注意 lrc 一个字节，但是是两个字符
 
-    LOG_D("hLen:%d", hLen);
+    // log_d("hLen:%d", hLen);
 
     hBuf = rt_malloc(hLen);
     rt_memset(hBuf, 0, hLen);

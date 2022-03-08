@@ -11,5 +11,6 @@
         "drv_gpio.h": "c",
         "at_log.h": "c"
     },
-    "C_Cpp.errorSquiggles": "Disabled"
+    "C_Cpp.errorSquiggles": "Disabled",
+    "python.formatting.provider": "black"
 }

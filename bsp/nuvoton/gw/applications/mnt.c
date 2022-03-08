@@ -185,6 +185,7 @@ int filesystem_init(void)
             mkdir_p("/mnt/ram_usbd", 0x777);
             mkdir_p("/mnt/filesystem", 0x777);
 
+
             // int fd, size;
             // char s[] = "RT-Thread Programmer!", buffer[80];
             // rt_kprintf("Write string %s to test.txt.\n", s);
@@ -232,6 +233,13 @@ int filesystem_init(void)
         RT_ASSERT(result == RT_EOK);
     }
 
+
+    mkdir_p("/mnt/filesystem/webnet", 0x777);
+    mkdir_p("/mnt/filesystem/webnet/admin", 0x777);
+    mkdir_p("/mnt/filesystem/webnet/css", 0x777);
+    mkdir_p("/mnt/filesystem/webnet/js", 0x777);
+    mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
+
     // if (dfs_mount("nand1", MOUNT_POINT_SPIFLASH0, "uffs", 0, 0) != 0)
     // {
     //     rt_kprintf("Failed to mount uffs on %s.\n", MOUNT_POINT_SPIFLASH0);
@@ -276,10 +284,16 @@ exit_mnt_init_spiflash0:
 INIT_APP_EXPORT(mnt_init_spiflash0);
 #endif
 
-// #if defined(BOARD_USING_STORAGE_SPINAND)
-// int mnt_init_spiflash0(void)
-// {
+#if defined(BOARD_USING_STORAGE_SPINAND)
+int mnt_init_spiflash0(void)
+{
 
-// }
-// INIT_APP_EXPORT(mnt_init_spiflash0);
-// #endif
+    mkdir_p("/mnt/filesystem/webnet", 0x777);
+    mkdir_p("/mnt/filesystem/webnet/admin", 0x777);
+    mkdir_p("/mnt/filesystem/webnet/css", 0x777);
+    mkdir_p("/mnt/filesystem/webnet/js", 0x777);
+    mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
+
+}
+INIT_APP_EXPORT(mnt_init_spiflash0);
+#endif

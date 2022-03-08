@@ -44,7 +44,9 @@ static void idle_hook(void)
 
     if (wdg_dev != RT_NULL)
     {
+        
         rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_KEEPALIVE, NULL);
+        
     }
 }
 

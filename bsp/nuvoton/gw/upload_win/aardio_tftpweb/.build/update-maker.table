@@ -1,0 +1,6 @@
+{
+updateUrl="http://47.94.84.166:9000/images/";
+singleFile=true;
+description="升级测试而已";
+outputDir="/update-files/"
+}

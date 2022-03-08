@@ -20,6 +20,7 @@ struct SER_PORT
 {
     char dev_name[6];  // uart1 uart6 RT_NAME_MAX
     uint8_t slaveAddr; // slaveAddr
+    uint8_t frameInterval;// 帧间隔，9600 buadrate => 9600 / (2+9+1) < 1
     char prot[6];      // ascii,rtu
     struct serial_configure config;
     struct rt_semaphore rx_sem;  // 该端口接收信号量
@@ -30,7 +31,7 @@ struct SER_PORT
 };
 
 struct CONFIG
-{
+{   
     uint8_t masterID;
     uint8_t slaveAddr;
     uint16_t startRegAddr;

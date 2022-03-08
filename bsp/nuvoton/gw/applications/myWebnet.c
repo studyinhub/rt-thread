@@ -39,10 +39,7 @@ int make_root_dirs()
         rt_sprintf(path, "%s%s", WEB_ROOT, init_wb_dirs[i]);
         LOG_D("dirs:%s", path);
     }
-    // mkdir_p("/mnt/filesystem/webnet", 0x777);
-    // mkdir_p("/mnt/filesystem/webnet/css", 0x777);
-    // mkdir_p("/mnt/filesystem/webnet/js", 0x777);
-    // mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
+
 }
 
 static void tftp_server_thread(void *param)
