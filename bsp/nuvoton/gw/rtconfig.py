@@ -21,8 +21,8 @@ elif CROSS_TOOL == 'keil':
 if os.getenv('RTT_EXEC_PATH'):
 	EXEC_PATH = os.getenv('RTT_EXEC_PATH')
 
-BUILD = 'debug'
-#BUILD = 'release'
+# BUILD = 'debug'
+BUILD = 'release'
 
 CORE = 'arm926ej-s'
 MAP_FILE = 'rtthread_nuc980.map'
@@ -55,7 +55,7 @@ if PLATFORM == 'gcc':
     LPATH = ''
 
     if BUILD == 'debug':
-        CFLAGS += ' -O2 -gdwarf-2'
+        CFLAGS += ' -O0 -gdwarf-2 -DWEBNET_INRAM'
         AFLAGS += ' -gdwarf-2'
     else:
         CFLAGS += ' -O2'

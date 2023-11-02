@@ -402,6 +402,7 @@ static void nu_wdt_isr(int vector, void *param)
         {
             /* Application does not feed the dog in time. */
             soft_time.expired = RT_TRUE;
+            log_e("超时了");
         }
     }
 }

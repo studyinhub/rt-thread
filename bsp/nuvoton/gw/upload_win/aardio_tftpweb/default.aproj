@@ -1,5 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<project ver="10" name="aardio_tftpweb" libEmbed="true" icon="..." ui="console" output="aardio_tftpweb.exe" CompanyName="单位名称" FileDescription="aardio_tftpweb" LegalCopyright="Copyright (C) 作者 2022" ProductName="aardio_tftpweb" InternalName="aardio_tftpweb" FileVersion="0.0.0.10" ProductVersion="0.0.0.10" publishDir="/dist/" dstrip="false">
-	<file name="main.aardio" path="main.aardio" comment="启动程序代码"/>
-	<folder name="资源文件" path="res" embed="true" local="false" ignored="false"/>
-</project>

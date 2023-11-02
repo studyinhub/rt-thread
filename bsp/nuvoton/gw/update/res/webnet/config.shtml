@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> 网关设置 </title>
+    <script src="./js/jquery-3.5.1.min.js"></script>
+
+    <script type="text/javascript">
+
+        function addToast() {
+
+            $.Toast("Notice", "保存成功.", "success", {
+                stack: false,
+                has_icon: true,
+                has_close_btn: true,
+                fullscreen: true,
+                timeout: 3000,
+                sticky: false,
+                has_progress: true,
+                rtl: false,
+            });
+        }
+
+        $(document).ready(function () {
+
+            var config = JSON.parse(localStorage.getItem('config'))
+            console.log("config:", config)
+            var port0 = config.ports[0]
+            $("#port0-name").text(port0.name)
+            $("#port0-baud_rate").text(port0.baud_rate)
+
+            $('#select10 option[value="{port0.baud_rate}]').attr("selected",true);
+
+            $("#port0-data_bits").text(port0.data_bits)
+            $("#port0-parity").text(port0.parity)
+            $("#port0-stop_bits").text(port0.stop_bits)
+            $("#port0-rtuRegStart").text(config.rtuRegStart)
+            $("#port0-rtuRegCnt").text(config.rtuRegCnt)
+
+            var port1 = config.ports[1]
+            $("#port1-name").text(port1.name)
+            $("#port1-baud_rate").text(port1.baud_rate)
+            $("#port1-data_bits").text(port1.data_bits)
+            $("#port1-parity").text(port1.parity)
+            $("#port1-stop_bits").text(port1.stop_bits)
+
+            var port2 = config.ports[2]
+            $("#port2-name").text(port2.name)
+            $("#port2-baud_rate").text(port2.baud_rate)
+            $("#port2-data_bits").text(port2.data_bits)
+            $("#port2-parity").text(port2.parity)
+            $("#port2-stop_bits").text(port2.stop_bits)
+
+
+            var div1 = true
+            var div2 = true
+            var div3 = true
+
+            $("#div11").hide()
+            $("#div22").hide()
+            $("#div33").hide()
+
+            $("#edit1").click(function () {
+                console.log('edit1 clicked')
+                if (div1 == true) {
+                    div1 = false
+                    $("#div1").hide("fast")
+                    $("#div11").show("fast")
+                } else {
+                    div1 = true
+                    $("#div1").show("fast")
+                    $("#div11").hide("fast")
+                    addToast()
+                }
+            })
+
+            $("#edit2").click(function () {
+                console.log('edit1 clicked')
+                if (div2 == true) {
+                    div2 = false
+                    $("#div2").hide("fast")
+                    $("#div22").show("fast")
+                } else {
+                    div2 = true
+                    $("#div2").show("fast")
+                    $("#div22").hide("fast")
+                    addToast()
+                }
+            })
+
+            $("#edit3").click(function () {
+                console.log('edit1 clicked')
+                if (div3 == true) {
+                    div3 = false
+                    $("#div3").hide("fast")
+                    $("#div33").show("fast")
+                } else {
+                    div3 = true
+                    $("#div3").show("fast")
+                    $("#div33").hide("fast")
+                    addToast()
+                }
+            })
+
+        })
+    </script>
+</head>
+<!-- <body style="background-color:#252525"> -->
+
+<body>
+
+    <!--#include virtual="/top.html" -->
+    <h1>Configurations</h1>
+    <div style="display: flex;align-items:center;">
+        <div>
+            <h2>RS-485 Modbus RTU MASTER</h2>
+        </div>
+        <div>
+            <a id="edit1"> <button >修改</button></a>
+            </button>
+        </div>
+    </div>
+    <div id="div1">
+        <ul>
+            <li>硬件端口:<span id="port0-name"></span></li>
+            <li>波特率:<span id="port0-baud_rate"></span></li>
+            <li>数据位:<span id="port0-data_bits"></span></li>
+            <li>校验位:<span id="port0-parity"></span></li>
+            <li>停止位:<span id="port0-stop_bits"></span></li>
+            <br />
+            <li>Master ID: 1</li>
+            <li>最多 slave 支持数:16 （1~16）</li>
+            <li>起始地址:<span id="port0-rtuRegStart"></span></li>
+            <li>寄存器个数:<span id="port0-rtuRegCnt"></span></li>
+            <li>轮询间隔:1000 (ms)</li>
+
+        </ul>
+    </div>
+
+    <div id="div11">
+        <form>
+            <ul>
+                <li>
+                    波特率:<select id="select10">
+                        <option value="2400">2400</option>
+                        <option value="4800">4800</option>
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200</option>
+                    </select>
+                </li>
+                <li>
+                    数据位:<select>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                    </select> 
+                </li>
+                <li>
+                    校验位:<select>
+                        <option value="0">NONE</option>
+                        <option value="1">ODD</option>
+                        <option value="2">EVEN</option>
+                    </select> 
+                </li>
+                <li>
+                    停止位:<select>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                    </select> 
+                </li>
+            </ul>
+
+        </form>
+    </div>
+
+    <div style="display: flex;align-items:center;">
+        <div>
+            <h2> RS-232 MODBUS ASCII SLAVE</h2>
+        </div>
+        <div>
+            <a id="edit2"> <button >修改</button></a>
+        </div>
+    </div>
+
+    <div id="div2">
+
+        <ul>
+            <li>硬件端口:<span id="port1-name"></span></li>
+            <li>波特率:<span id="port1-baud_rate"></span></li>
+            <li>数据位:<span id="port1-data_bits"></span></li>
+            <li>校验位:<span id="port1-parity"></span></li>
+            <li>停止位:<span id="port1-stop_bits"></span></li>
+        </ul>
+    </div>
+
+    <div id="div22">
+        <form>
+            <ul>
+                <li>
+                    波特率:<select>
+                        <option value="2400">2400</option>
+                        <option value="4800">4800</option>
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200</option>
+                    </select>
+                </li>
+                <li>
+                    数据位:<select>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                    </select> 
+                </li>
+                <li>
+                    校验位:<select>
+                        <option value="0">NONE</option>
+                        <option value="1">ODD</option>
+                        <option value="2">EVEN</option>
+                    </select> 
+                </li>
+                <li>
+                    停止位:<select>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                    </select> 
+                </li>
+            </ul>
+
+        </form>
+    </div>
+
+    <div style="display: flex;align-items:center;">
+        <div>
+            <h2>RS-485 MODBUS ASCII SLAVE</h2>
+        </div>
+        <div>
+            <a id="edit3"> <button >修改</button></a>
+        </div>
+    </div>
+
+    <div id="div3">
+
+        <ul>
+            <li>硬件端口:<span id="port2-name"></span></li>
+            <li>波特率:<span id="port2-baud_rate"></span></li>
+            <li>数据位:<span id="port2-data_bits"></span></li>
+            <li>校验位:<span id="port2-parity"></span></li>
+            <li>停止位:<span id="port2-stop_bits"></span></li>
+        </ul>
+    </div>
+
+    <div id="div33">
+        <form>
+            <ul>
+                <li>
+                    波特率:<select>
+                        <option value="2400">2400</option>
+                        <option value="4800">4800</option>
+                        <option value="9600">9600</option>
+                        <option value="19200">19200</option>
+                        <option value="38400">38400</option>
+                        <option value="57600">57600</option>
+                        <option value="115200">115200</option>
+                    </select>
+                </li>
+                <li>
+                    数据位:<select>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                    </select> 
+                </li>
+                <li>
+                    校验位:<select>
+                        <option value="0">NONE</option>
+                        <option value="1">ODD</option>
+                        <option value="2">EVEN</option>
+                    </select> 
+                </li>
+                <li>
+                    停止位:<select>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                    </select> 
+                </li>
+            </ul>
+
+        </form>
+    </div>
+
+    <a href="javascript:history.go(-1);">Go back</a>
+</body>
+
+</html>

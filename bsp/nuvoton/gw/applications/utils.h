@@ -6,7 +6,8 @@
 
 extern char ATOHChar(char *var);
 extern int ATOHInt(char *var);
-extern int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint8_t len);
-extern int HEX_LRC(uint8_t *buf, uint8_t len);
-extern int ASCII_LRC(uint8_t *buf, uint8_t len);
+extern int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len,uint8_t endian);
+extern int HEX_LRC(uint8_t *buf, uint16_t len);
+extern int ASCII_LRC(uint8_t *buf, uint16_t len);
+extern void endian_convert_int16(int16_t *buf, size_t size);
 #endif

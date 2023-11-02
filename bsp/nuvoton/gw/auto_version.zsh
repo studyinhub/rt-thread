@@ -43,6 +43,14 @@ void printVersion()
 }
 "
 
+CMicro_printVersion="
+#define printVersion() do \
+{\
+   printf(\"version:%s build:%s\\n\",VERSION,BUILDTIME);\
+}\
+while(0);
+"
+
 
 # -r 不对字符串进行转义
 function write_line()
@@ -81,7 +89,8 @@ write_line "#define patch ${patch}"
 write_line "#define build ${build}"
 
 write_line "#include <stdio.h>"
-write_line $cFun_printVersion
+# write_line $cFun_printVersion
+write_line $CMicro_printVersion
 
 write_header_end
 

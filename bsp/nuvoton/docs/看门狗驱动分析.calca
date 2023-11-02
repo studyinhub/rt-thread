@@ -1,0 +1,42 @@
+
+
+1/32765 * 2^4 => 0.0005
+1/32765 * 2^10 => 0.0313
+1/32765 * 2^20 => 32.0029
+
+
+12000000/512=> 23,437.5
+
+512/12000000 * 2^4 => 0.0007
+512/12000000 * 2^10=> 0.0437
+512/12000000 * 2^20 => 44.7392
+
+2^10 => 1,024
+
+23408-14209 => 9,199
+
+
+
+ROUND_TO_INTEGER(x) = ceil(((x)*10+5)/10)
+
+
+$hz=12000000 / 512 
+$period = 1 /$hz
+$MIN_TOUTSEL = 2^10
+$MIN_CYCLES=1024
+
+
+
+CONV_SEC_TO_IT(hz,secs) = ROUND_TO_INTEGER((secs * hz)/$MIN_CYCLES)
+CONV_IT_TO_SEC(hz,iterations) = ROUND_TO_INTEGER(iterations * $MIN_CYCLES / hz)
+
+26秒中中断 596 次
+CONV_SEC_TO_IT($hz,26)=> 596
+
+
+CONV_IT_TO_SEC($hz,596) => 27
+
+(22760-12589)/1000 => 10.171
+
+
+35861 - 25782 => 10,079

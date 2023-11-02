@@ -1,0 +1,232 @@
+import console; 
+import fsys;
+import process.popen;
+
+import inet.http;
+import zlib.unzip
+import key;
+
+import fsys.version; 
+
+io.open()
+
+io.print("version:",fsys.version.getInfo(io._exepath).productVersion)
+
+import config;
+
+var cfg = fsys.config("/config/")
+
+io.print("version:", cfg.__appVersion)
+
+// console.dumpJson(cfg)
+
+
+// https://github.com/TheMRLL/WinXray
+
+// https://bbs.aardio.com/forum.php?mod=viewthread&tid=11999
+
+// https://gitee.com/wmhx/aardio_project/
+
+import fsys.update.simpleMain;
+if( fsys.update.simpleMain(
+	"aardio_tftpweb",
+	"http://47.94.84.166:9000/images/version.txt", /*网址也可以改用目录名，并使用服务端代码动态返回version.txt*/
+	"/download/update-files", /*绿色软件建议改为 io.appData("/软件厂商名/软件名字/update-files") */
+	function(version,description,status){
+		io.print("version111:",version)
+		/*
+		version参数包含最新版本号，
+		description包含最新版本更新说明，
+		status参数值见下面的列表：
+			"ready": 下载已完成并准备更新,
+			"updated": 已更新到新版本并准备启动新版
+			"complete": 当前已更新并已启动新版本主程序，所有操作已完成
+			"latest": 已经是最新版不需要更新
+			"failed": 出错了,description参数为错误信息
+		
+		这个回调函数不是必须的，
+		在此检测更新代码之前或之后都可以在界面线程调用
+		fsys.update.simpleMain.onStatusChanged 订阅更新状态变更信息。
+		该认阅回调函数的参数与上面的回调参数相同。
+		*/
+	} )){
+	return 0; //必须退出 main.aardio 以启动更新
+}
+
+
+import fsys.update.dlMgr;
+checkurl = "http://47.94.84.166:9000/images/update-files/version.txt"
+
+var dlMgr = fsys.update.dlMgr(checkurl,"./");
+
+var checked = false
+		
+dlMgr.onConfirmDownload = function(isUpdated,appVersion,latestVersion,description){ 
+	
+	dlMgr[["latestVersion"]] = latestVersion;
+	dlMgr[["updateDescription"]] = description;
+	
+	io.print("latestVersion:",latestVersion,description)
+	
+	if(!isUpdated)
+		io.print("已经是最新版本")
+		
+	checked = true
+
+	return isUpdated; 
+} 
+
+dlMgr.onEnd = function(updater,saveDir,appDir,mainPath){ 
+	io.print("updater:",updater,updateDescription)
+	if(updater){
+		globalUpdateInfo = {
+			version = dlMgr[["latestVersion"]];
+			description = dlMgr[["updateDescription"]];
+		}; 
+		
+		io.print("updater:",updater,updateDescription)
+	}
+	else {
+		globalUpdateInfo = null;
+	}
+	
+
+	publish("wubiLexUpdated");
+};
+	
+dlMgr.onError = function(err,filename){
+	io.print("err:",err)
+}
+
+dlMgr.create()
+/*
+if(dlMgr.startUpdate()){
+	win.quitMessage();
+}
+*/
+
+
+var url = "http://47.94.84.166:9000/images/webnet.zip"
+var path = "/" + ..inet.url.getFileName(url); 
+ 
+// https://bbs.aardio.com/forum.php?mod=viewthread&tid=6796&highlight=zip
+
+function unzip(){
+	var ok,err = zlib.unzip.extract( path,"/res",
+        function(fileName,extractPath,fileInfo,size,unitSize,unitName){
+                if( size !== null )
+                        ..io.print( "正在解压文件",fileName,size++ unitName );
+                else {
+                        ..io.print( "正在解压目录",fileName );
+                }
+                
+                return true;
+        }
+)
+}
+
+function download(){
+	
+	
+	var whttp = inet.http();
+	assert( whttp.beginRequest( url ) ) 
+	
+	var ok,code,contentLength = whttp.send(); 
+	if(!ok) {
+		io.print("error:",code)
+		return;
+	};
+	
+	//取得文件长度 
+	if(contentLength){
+		io.print(fsys.formatSize(contentLength));
+	}
+	else {
+		contentLength = 1024 * 500;
+	}
+		
+
+	var file = io.open( path,"w+b")
+	var buffer = ..raw.buffer( 1024 );
+	
+	for( 长度 in whttp.eachReadBuffer(buffer)){
+		file.writeBuffer(buffer,长度);
+	}  
+	
+	file.close();
+	
+	//process.explore_select(path)
+}
+
+function upload(){
+	var relativePath= fsys.path.canonicalize("/res/webnet")
+	io.print("relativePath:",relativePath)
+	
+	fsys.enum( "/res/webnet", "*.*",
+	function(dirname,filename,fullpath,findData){ 
+		if(filename){ 
+	        //io.print("发现文件："+filename,"完整路径："+fullpath)/*可使用 return false退出枚举文件过程*/
+	        //io.print("相对路径：",io.localpath("res/pack_src"))
+	        //io.print("短路径：",fsys.path.short(fullpath))
+	        // 等待外部执行完毕，不会结束外部进程
+	    	var cmd = `curl -T %s tftp://192.168.1.100/%s`
+	    	
+	    	sourcePath = fullpath
+	    	targetPath = fsys.path.relative(fullpath,relativePath,false)
+	    	targetPath = string.replace(targetPath,"@\","/")
+	    	cmd= string.format(cmd,sourcePath,targetPath)
+	    	io.print("cmd:",cmd)
+	   
+			var prcs = process.popen(cmd);
+			io.print("返回结果",prcs.logResponse());
+
+	    		
+		}
+		else{
+			//io.print( "发现目录：" + dirname )
+		}
+	},
+	function(dirpath,dirname){
+		
+		return true;
+	}
+	)
+}
+
+function clear()
+{
+	fsys.delete(path)
+	fsys.delete("/res/webnet")	
+}
+
+
+download()
+
+unzip()
+
+upload()
+
+clear()
+
+
+//创建工作线程
+/*
+thread.invoke( 
+
+	//线程启动函数
+	function(){
+		
+		while(true)
+		{
+			sleep(500)
+			io.print("checked:",checked)
+		}
+	
+	} 
+)
+
+*/
+
+win.loopMessage()
+
+

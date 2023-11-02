@@ -127,9 +127,7 @@ static rt_err_t nau8822_reset(void)
 {
     I2C_WriteNAU8822(0,  0x000);   /* Reset all registers */
     nau8822_delay_ms(30);
-
-    LOG_I("Software Reset.\n");
-
+    LOG_I("Software Reset.");
     return RT_EOK;
 }
 
@@ -285,6 +283,10 @@ static rt_err_t nau8822_init(void)
     }
 
     I2C_WriteNAU8822(10, 0x008);   /* DAC soft mute is disabled, DAC oversampling rate is 128x */
+
+    I2C_WriteNAU8822(11, 0x1DF); 
+    I2C_WriteNAU8822(12, 0x1DF);
+
     I2C_WriteNAU8822(14, 0x108);   /* ADC HP filter is disabled, ADC oversampling rate is 128x */
     I2C_WriteNAU8822(15, 0x1EF);   /* ADC left digital volume control */
     I2C_WriteNAU8822(16, 0x1EF);   /* ADC right digital volume control */
@@ -297,7 +299,7 @@ static rt_err_t nau8822_init(void)
     nu_acodec_ops_nau8822.config.channels = 2;
     nu_acodec_ops_nau8822.config.samplebits = 16;
 
-    LOG_I("Initialized done.\n");
+    LOG_I("Initialized done.");
 
     return RT_EOK;
 }

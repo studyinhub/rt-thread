@@ -87,7 +87,7 @@ static int audio_test(int argc, char **argv)
 
 static int audio_overnight(int argc, char **argv)
 {
-#define DEF_MAX_TEST_SECOND 10
+#define DEF_MAX_TEST_SECOND 5
 
     struct wavrecord_info info;
     char strbuf[128];

@@ -1,0 +1,189 @@
+# Introduction
+
+Welcome to Calca - the text editor for people that love math.
+
+Calca recognizes math in your text and performs calculations as you type.
+
+There is one very important thing to know: whenever you want Calca to solve or simplify or compute something, just write `=>`
+
+    2 + 2           => 4
+    80% * 2000      => 1,600
+    sin(pi/6)       => 0.5
+    10 * (x + 0.5x) => 15 x
+    $33 in ¥        => ¥3,587.3466
+
+Pay special attention throughout this introduction for the `=>` symbol, everything to the right of it is computed by Calca. These computations are highlighted in a light gray and cannot be edited.
+
+Now you can go to any point in the document, change something, and see Calca update all the gray areas.
+
+
+## Spreadsheets
+
+Calca is great for making cumulative computations - just like a spreadsheet:
+
+    trip cost = flight +
+      (hotel + food) * days
+
+    days   = 7
+    flight = $500
+    hotel  = $120
+    food   = $30
+
+    trip cost => $1,550
+
+As you edit the numbers, the total will update automatically. Try it yourself, change the hotel rate from $120 to $300 (let's enjoy ourselves).
+
+
+## Functions
+
+Calca loves functions and makes them really easy to create and manipulate. We can specify a generic function for a line and then calculate its value:
+
+    y(x) = m*x + b
+
+    y(10) => 10 m + b
+
+Calca wasn't able to give a numeric value for `y(10)` because it doesn't know the values of `m` or `b`.
+
+We can tell it those values as additional arguments to the function:
+
+    y(10, m=2, b=103) => 123
+
+We can even ask Calca solve for a variable from that function:
+
+    b => y - m*x
+
+    b(x=0, y=10, m=1) => 10
+
+It's algebra and arithmetic at your fingertips.
+
+
+## Basics
+
+Below are the basic elements of Calca that you need to understand to use it effectively. I promise, it's not a lot.
+
+### Numbers
+
+Numbers are written just as you would expect:
+
+    12; -12; 3,100; 3.14159
+
+Note that you can use `,` inside numbers to make them more readable.
+
+You can also use power of ten notation:
+
+    3.14e3  => 3,140
+    3.14e-3 => 0.0031
+
+### Arithmetic
+
+The basic math operations are all supported:
+
+1 + 2 * 3   => 7
+(1 + 2) * 3 => 9
+-22/7       => -3.1429
+2^32 - 1    => 4,294,967,295
+
+### Variables
+
+Variables are just words that represent some number. 
+
+    a; x; radius of earth
+
+Calca is smart enough to understand multiword variables so you don't have to be coy.
+
+### Definitions
+
+A definition relates a name to a value. Calca highlights definitions in bold so that you can easily recognize them:
+
+    taco = $1.5
+    
+    lamborghini = $404,195
+    
+    lamborghini/taco => 269,463.3333
+
+It looks like we could own a Lamborghini for just `270,000` tacos!
+
+### Functions
+
+All definitions are actually functions:
+
+    f = m*a
+
+    f(20) => 20 a
+
+Calca simply looks at the variables used on the right hand side of the function in order to determine its arguments.
+
+It's usually better to specify the function arguments directly to be sure you and Calca are thinking alike:
+
+    good f(a) = m*a
+
+    good f(20) => 20 m
+
+
+### Built in Functions
+
+Calca knows all about the standard math functions:
+
+sin(pi/6)            => 0.5
+atan2(10,10) in °    => 45°
+floor(8/3)           => 2
+ceil(8/3)            => 3
+log(1000, 2)         => 9.9658
+2^ceil(log(1000, 2)) => 1,024
+
+
+### Solving for variables
+
+If you want to rewrite a definition in terms of one of its variables, then just ask Calca to do that:
+
+    f = (9/5)*c + 32
+
+    c => 0.5556 f - 17.7778
+
+
+### Unit and Currency Conversions
+
+Calca knows over 200 units and 35 currencies. You can convert between them using the `in` keyword.
+
+    100 yards in m => 91.44 m
+    
+    $20 in eur => 17.9154€
+
+
+### Google Search
+
+Sometimes you won't know a value and Calca won't know it either. In those dire times, you can resort to using a Google search to find it out.
+
+Simply begin a definition as you normally would, but put a `?` to the right of the equals sign instead of a value. Calca will then beg Google for an answer on your behalf.
+
+    radius of the earth = #?
+
+Remove the `#` above and Calca will replace it with the value `3,959 mi`.
+
+
+### Errors
+
+If Calca doesn't understand you, it will underline the text it's having a problem with.
+
+    1 + 2 * =>
+
+That line doesn't work because Calca is expecting more information (a number or a variable) after the `*`.
+
+
+### Markdown
+
+Calca also understands [Markdown][markdown] text so you can annotate your calculations in a nice readable fashion.
+
+Lines that begin with a `#` are interpreted as headings. The number of hash signs specifies the heading level. You can make text **bold** and *italic*. Lastly you can format text as code by surrounding it with `backticks`.
+
+[markdown]: http://daringfireball.net/projects/markdown/syntax
+
+
+## Party on!
+
+You now know enough to make good use of Calca, but there are many more features to discover!
+
+If you're not in the mood for exploration, you can cheat and learn about those features in the Examples and Reference documents.
+
+Thanks for purchasing Calca, I hope you enjoy it!
+

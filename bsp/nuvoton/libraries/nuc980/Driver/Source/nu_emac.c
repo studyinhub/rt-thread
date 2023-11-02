@@ -170,12 +170,12 @@ void EMAC_Reset(EMAC_T *EMAC)
   * @param  None
   * @return None
   */
+
 void EMAC_PhyInit(EMAC_T *EMAC)
 {
     uint32_t reg;
     uint32_t i = 0UL;
 
-    rt_kprintf("EMAC_PhyInit!!!!!!!!\n");
 
     /* Reset Phy Chip */
     EMAC_MdioWrite(EMAC, PHY_CNTL_REG, EMAC_PHY_ADDR, PHY_CNTL_RESET_PHY);
@@ -184,12 +184,18 @@ void EMAC_PhyInit(EMAC_T *EMAC)
     while (1)
     {
         reg = EMAC_MdioRead(EMAC, PHY_CNTL_REG, EMAC_PHY_ADDR) ;
-
+ 
         if ((reg & PHY_CNTL_RESET_PHY) == 0UL)
         {
             break;
+        }else if(reg == 65535)
+        {
+            printf("请检查EMAC_PHY_ADDR!%d\r\n",EMAC_PHY_ADDR);
         }
+        for (long long loop = 0; loop < 100000000; loop++);
+
     }
+
 
     while (!(EMAC_MdioRead(EMAC, PHY_STATUS_REG, EMAC_PHY_ADDR) & PHY_STATUS_LINK_VALID))
     {
@@ -223,6 +229,7 @@ void EMAC_PhyInit(EMAC_T *EMAC)
         {
             ;
         }
+
 
         /* Check link partner capability */
         reg = EMAC_MdioRead(EMAC, PHY_ANLPA_REG, EMAC_PHY_ADDR) ;

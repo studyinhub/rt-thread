@@ -28,8 +28,8 @@ static void nu_pin_emac_init(void)
     outpw(REG_SYS_GPE_MFPH, (inpw(REG_SYS_GPE_MFPH) & ~0xFF) | 0x11);
 
     /* EMAC1  */
-//    outpw(REG_SYS_GPF_MFPL, 0x11111111);
-//    outpw(REG_SYS_GPF_MFPH, (inpw(REG_SYS_GPF_MFPH) & ~0xFF) | 0x11);
+   outpw(REG_SYS_GPF_MFPL, 0x11111111);
+   outpw(REG_SYS_GPF_MFPH, (inpw(REG_SYS_GPF_MFPH) & ~0xFF) | 0x11);
 }
 
 static void nu_pin_sdh_init(void)

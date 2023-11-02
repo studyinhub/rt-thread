@@ -335,6 +335,8 @@ static rt_err_t nu_emac_init(rt_device_t dev)
     netif_set_igmp_mac_filter(psNuEmac->eth.netif, nu_igmp_mac_filter);
 #endif /* LWIP_IPV4 && LWIP_IGMP */
 
+
+    rt_kprintf("rt_thread_create link_monitor!!!!!!!!!\n");
     psNuEmac->link_monitor =  rt_thread_create((const char *)szTmp,
                               link_monitor,
                               (void *)psNuEmac,

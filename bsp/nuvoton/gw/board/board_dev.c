@@ -11,6 +11,8 @@
 #include <rtconfig.h>
 #include <rtdevice.h>
 #include <drv_uart.h>
+#include "easyblink.h"
+
 
 #define LOG_TAG "board"
 #define LOG_LVL LOG_LVL_DBG
@@ -18,7 +20,7 @@
 #include "main.h"
 #include "mnt.h"
 #include "cJSON.h"
-#include "config.h"
+#include "myConfig.h"
 
 #if defined(BOARD_USING_STORAGE_SPINAND) && defined(NU_PKG_USING_SPINAND)
 
@@ -67,49 +69,11 @@ static int rt_hw_spinand_init(void)
 INIT_COMPONENT_EXPORT(rt_hw_spinand_init);
 #endif //defined(BOARD_USING_STORAGE_SPINAND) && defined(NU_PKG_USING_SPINAND)
 
-#include <drv_gpio.h>
-#include "easyblink.h"
 
-// 左 1 PA7                         右 1  PA11 UART8_RX
-// 左 2 PA8                         右 2  PA12 UART8_TX
-// 左 3 4G 信号灯，所以不受 CPU 控制   右 3  PA4  UART6 RX
-// 左 4 电源灯                       右 4  PA5  UART6 TX
 
-// 4G 模块 PC1 PC2 UART7
 
-#define LED_1 NU_GET_PININDEX(NU_PA, 7) // 左 1
-#define LED_2 NU_GET_PININDEX(NU_PA, 8) // 左 2
-#define KEY_1 NU_GET_PININDEX(NU_PB, 7) // 16+7 23,低电平复位
 
-ebled_t led_1 = RT_NULL;
-ebled_t led_2 = RT_NULL;
 
-int test_led(int argc, char **argv)
-{
-    rt_kprintf("argc:%d\n", argc);
-
-    if (argc < 1)
-    {
-        rt_kprintf("请输入参数");
-    }
-    for (int i = 0; i < argc; i++)
-    {
-        rt_kprintf("%d:%s\n", i, argv[i]);
-    }
-    int pinNum = atoi(argv[1]);
-    rt_pin_mode(pinNum, PIN_MODE_OUTPUT);
-
-    if (!strcmp(argv[2], "lo"))
-    {
-        rt_pin_write(pinNum, PIN_LOW);
-    }
-    else
-    {
-        rt_pin_write(pinNum, PIN_HIGH);
-    }
-}
-
-MSH_CMD_EXPORT(test_led, test led gpio);
 
 #if defined(BOARD_USING_UART1_RS232)
 #define NU_UART1_DEVNAME "uart1"
@@ -345,7 +309,7 @@ void nu_button_cb(void *args)
     switch (u32Key)
     {
     case KEY_1:
-        rt_pin_write(LED_2, ~rt_pin_read(LED_2));
+        rt_pin_write(LED_WRK, ~rt_pin_read(LED_WRK));
         extern void rt_hw_cpu_reset(void);
         rt_hw_cpu_reset();
         break;
@@ -355,22 +319,56 @@ void nu_button_cb(void *args)
     }
 }
 
+
+ebled_t led_run = RT_NULL;
+ebled_t led_wrk = RT_NULL;
+
+int test_led(int argc, char **argv)
+{
+    rt_kprintf("argc:%d\n", argc);
+
+    if (argc < 1)
+    {
+        rt_kprintf("请输入参数");
+    }
+    for (int i = 0; i < argc; i++)
+    {
+        rt_kprintf("%d:%s\n", i, argv[i]);
+    }
+    int pinNum = atoi(argv[1]);
+    rt_pin_mode(pinNum, PIN_MODE_OUTPUT);
+
+    if (!strcmp(argv[2], "lo"))
+    {
+        rt_pin_write(pinNum, PIN_LOW);
+    }
+    else
+    {
+        rt_pin_write(pinNum, PIN_HIGH);
+    }
+}
+
+MSH_CMD_EXPORT(test_led, test led gpio);
+// extern ebled_t led_run;
+// extern ebled_t led_wrk;
 int board_init(void)
 {
 
     rt_kprintf("Begin to init LED!\n");
 
-    rt_pin_mode(LED_1, PIN_MODE_OUTPUT);
-    rt_pin_mode(LED_2, PIN_MODE_OUTPUT);
+    rt_pin_mode(LED_RUN, PIN_MODE_OUTPUT);
+    rt_pin_mode(LED_WRK, PIN_MODE_OUTPUT);
 
-    rt_pin_write(LED_1, PIN_LOW);
-    rt_pin_write(LED_2, PIN_LOW);
+    rt_pin_write(LED_RUN, PIN_LOW); // 低电平亮
+    rt_pin_write(LED_WRK, PIN_LOW); // 低电平亮
 
-    led_1 = easyblink_init_led(LED_1, PIN_LOW);
-    led_2 = easyblink_init_led(LED_2, PIN_LOW);
+    led_run = easyblink_init_led(LED_RUN, PIN_LOW);// 低电平有效，并关闭 LED
+    led_wrk = easyblink_init_led(LED_WRK, PIN_LOW);// 低电平有效，并关闭 LED
 
-    easyblink(led_1, -1, 250, 500);
-    easyblink(led_2, -1, 100, 200);
+   
+
+    // easyblink(led_run, -1, 250, 500);
+    // easyblink(led_2, -1, 100, 200);
 
     rt_kprintf("Begin to init KEY!\n");
 

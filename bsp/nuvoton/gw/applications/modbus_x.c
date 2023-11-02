@@ -1,37 +1,87 @@
+#include "board.h"
 #include "modbus_x.h"
-#include "config.h"
-#include "mb.h"
-#include "mb_m.h"
-#include "user_mb_app.h"
-#include "app_config.h"
+#include "myConfig.h"
+#include "agile_modbus.h"
+
+// #include "mb.h"
+// #include "mb_m.h"
+// #include "user_mb_app.h"
 
 #include "crc16.h"
 #include "utils.h"
+#include "board.h"
+
+
+
 
 #define LOG_TAG "modbusx"
-#define LOG_LVL LOG_LVL_DBG
+#define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
 #include <ulog.h>
 
-int RAddLimitMax = 255; //允许读寻址的最大值
-int RAddLimitMin = 0;  //允许读寻址的最小值
-int WAddLimitMax = 255; //允许写寻址的最大值
-int WAddLimitMin = 0;  //允许写寻址的最小
+#define SCAN_READ_BYTES 205
 
-extern USHORT usMRegHoldBuf[MB_MASTER_TOTAL_SLAVE_NUM][M_REG_HOLDING_NREGS];
+int RAddLimitMax = 255; //允许读寻址的最大值
+int RAddLimitMin = 0;   //允许读寻址的最小值
+int WAddLimitMax = 255; //允许写寻址的最大值
+int WAddLimitMin = 0;   //允许写寻址的最小
+
+extern struct rt_mailbox asc_resp_mb;
+extern struct rt_messagequeue asc_send_mq;
+
+// extern USHORT usMRegHoldBuf[MB_MASTER_TOTAL_SLAVE_NUM][M_REG_HOLDING_NREGS];
 
 struct CONFIG g_stConfig = {
-    .masterID = 1,
-    .slaveAddr = 1,
+    .mapEnable = 1,
+    .scanEnable = 1,
+    .scanRegCnt = 100,
+    .rtuAddr = 1,
+    .ascAddr = 1, // 
     .startRegAddr = 0,
     .regsCnt = 10,
     .serPort = {
+        {"uart8", 0, 5, "rtu", RT_SERIAL_CONFIG_DEFAULT},   // RTU-RS485 master
         {"uart1", 1, 5, "ascii", RT_SERIAL_CONFIG_DEFAULT}, // ASCII-RS232 slave
         {"uart6", 1, 5, "ascii", RT_SERIAL_CONFIG_DEFAULT}, // ASCII-RS485 slave
-        {"uart8", 0, 5, "rtu", RT_SERIAL_CONFIG_DEFAULT}}   // RTU-RS485 master
-};
+    },
+    // 实际上只有一个 PLC,但是在软件上分成了 3 端
+    .scanTask = {
+        {
+            .name = "sys1", 
+            .enable =1, 
+            .slaveAddr=1,   // 需要根据 0090 地址来决定 ASCII 端通信地址,默认为 1
+            .regAddr=  0,
+            .cnt=100,
+            .offset=0       // 响应偏移
+        },
+        {
+            .name = "sys2", 
+            .enable =0, 
+            .slaveAddr=2,  
+            .regAddr = 0,
+            .cnt=100,
+            .offset=40
+        },
+        {
+            .name = "sys2", 
+            .enable =0, 
+            .slaveAddr=3,  
+            .regAddr=  0,
+            .cnt=100,
+            .offset=60
+        },
+    }
+    };
 
 // 01 03 00 01 00 01 D5 CA
 // 01 03 00 00 00 0A C5 CD
+
+agile_modbus_rtu_t g_ctx_rtu;
+agile_modbus_t *g_ctx = &g_ctx_rtu._ctx;
+
+// 互斥量，当在解析的过程中，禁止更新数据
+static rt_mutex_t dynamic_mutex = RT_NULL;
+
+int g_read_len;
 
 void send_rtu_frame(uint8_t slaveAddr, uint8_t funCode, uint16_t regStart, uint16_t regCnt, uint16_t bytesCnt, uint8_t *buf)
 {
@@ -39,10 +89,11 @@ void send_rtu_frame(uint8_t slaveAddr, uint8_t funCode, uint16_t regStart, uint1
     int i = 0;
     uint16_t crc;
 
-    log_i("发送功能码%d到%d", funCode, slaveAddr);
+    // log_i("发送功能码%d到%d", funCode, slaveAddr);
 
     pwBuf = rt_malloc(24);
-    struct SER_PORT *port = &g_stConfig.serPort[2];
+    rt_memset(pwBuf, '\0', 24);
+    struct SER_PORT *port = &g_stConfig.serPort[0];
 
     *pwBuf = slaveAddr;
     i += 1;
@@ -56,7 +107,7 @@ void send_rtu_frame(uint8_t slaveAddr, uint8_t funCode, uint16_t regStart, uint1
     *(pwBuf + i) = regStart & 0x00ff;
     i += 1;
 
-    log_d("读/写寄存器数:(%d)", regCnt);
+    // log_d("读/写寄存器数:(%d)", regCnt);
 
     *(pwBuf + i) = (regCnt >> 8) && 0xFF;
     i += 1;
@@ -90,12 +141,12 @@ void send_rtu_frame(uint8_t slaveAddr, uint8_t funCode, uint16_t regStart, uint1
     *(pwBuf + i) = crc % 0x100; //校验值低8位
     i += 1;
 
-    log_d("发送到 RTU：crc:%04X", crc);
-    for (int j = 0; j < i; j++)
-    {
-        rt_kprintf("%02X ", *(pwBuf + j));
-    }
-    rt_kprintf("\n");
+    // log_d("发送到 RTU：crc:%04X", crc);
+    // for (int j = 0; j < i; j++)
+    // {
+    //     rt_kprintf("%02X ", *(pwBuf + j));
+    // }
+    // rt_kprintf("\n");
 
     rt_device_write(port->device, 0, pwBuf, i);
     free(pwBuf);
@@ -104,7 +155,7 @@ void send_rtu_frame(uint8_t slaveAddr, uint8_t funCode, uint16_t regStart, uint1
 // :011706000000000000E2
 
 // :01 17 1A 0328 0000 0000 0010 0000 0000 0000 0000 0000 0000 0000 0000 0000 93\CR\LF
-void response_ascii_frame(uint8_t slaveAddr,uint8_t funCode, uint8_t *buf,uint16_t bufLen)
+void response_ascii_frame(uint8_t slaveAddr, uint8_t funCode, uint8_t *buf, uint16_t bufLen)
 {
     char *pwBuf;
     uint8_t calc_lrc = 0;
@@ -136,7 +187,6 @@ void response_ascii_frame(uint8_t slaveAddr,uint8_t funCode, uint8_t *buf,uint16
 
     // pwBuf = rt_malloc(frame_len);
     // rt_memset(pwBuf, '\0', frame_len);
-
 
     // *pwBuf = ':';
     // HToAChar(pwBuf + 1, &slaveAddr, 1);
@@ -175,7 +225,7 @@ void read_regs(uint8_t slaveAddr, uint8_t funCode, uint16_t regStart, uint16_t r
     switch (funCode)
     {
     case 3:
-        // 01 03 00 00 00 0D 00 00 23 04 
+        // 01 03 00 00 00 0D 00 00 23 04
         send_rtu_frame(slaveAddr, funCode, regStart, regCnt, 0, NULL);
         break;
     case 1:
@@ -208,41 +258,127 @@ void write_regs(uint8_t slaveAddr, uint8_t funCode, uint16_t regStart, uint16_t 
     }
 }
 
+
+static int rtu_hold_query(uint16_t slaveAddr,int regStartAddr,int regCnt,uint16_t* holdBuf)
+{
+    int send_len = 0, read_len =0, rc=0, ret = 0;
+
+    uint8_t temp[SCAN_READ_BYTES];
+
+    // log_d("slaveAddr:%d",slaveAddr);
+    // log_d("regStartAddr:%d",regStartAddr);
+    // log_d("regCnt:%d",regCnt);
+    // log_d("holdBuf:%d",holdBuf);
+
+    rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
+
+    agile_modbus_set_slave(g_ctx, slaveAddr);
+
+    rt_memset(g_ctx->send_buf,0,g_ctx->send_bufsz);
+    send_len = agile_modbus_serialize_read_registers(g_ctx, regStartAddr, regCnt);
+    // log_d("send_len:%d",send_len);
+    rs485_send(g_stConfig.serPort[0].device,g_ctx->send_buf, send_len);
+    // ulog_hexdump("send",16,g_ctx->send_buf,send_len);
+    // g_stConfig.serPort[0].frameInterval
+    rt_memset(g_ctx->read_buf,0,g_ctx->read_bufsz);
+    // 读取数据,500 ms 内读完
+    // 帧间隔:g_stConfig.serPort[0].frameInterval
+    read_len = rs485_receive(g_ctx->read_buf, g_ctx->read_bufsz, 3000, 10);
+    // log_d("read_len:%d", read_len);
+
+    if(read_len <= 0 || read_len != g_ctx->read_bufsz)
+    {
+        // log_d("数据读取错误 readsize:%d read_len:%d",g_ctx->read_bufsz,read_len);
+
+        // 抽干串口端的数据
+        rs485_receive(temp, 1000, 100,10);
+        rt_memset(temp,'\0',g_ctx->read_bufsz);
+        // log_e("没有读取到数据,检查下位机设备是否连接正常");
+        // rt_pin_write(LED_WRK, !(rt_pin_read(LED_WRK)));
+        easyblink(led_wrk, -1, 500, 1000);
+        return -1;
+    }
+
+    // ulog_hexdump("recv",16, g_ctx->read_buf, g_ctx->read_bufsz);
+
+
+
+    // 解析读到的数据g_stConfig.scanTask[i].hold g_hold_register
+    rc = agile_modbus_deserialize_read_registers(g_ctx, read_len, holdBuf);
+
+    if (rc < 0)
+    {
+        log_e("Receive failed.%d",rc);
+        if (rc != -1)
+            LOG_W("Error code:%d", -128 - rc);
+    }else
+    {
+        easyblink_stop(led_wrk);
+        eb_led_on(led_wrk);
+    }
+
+    return ret;
+}
+
+
+// 解析收到的 ascii 帧
 uint8_t parse_ascii_frame(char *ptrFrame, rt_uint32_t frame_len)
 {
 
+    uint8_t ret = 0;
+
     clock_t start = 0, end = 0;
     start = clock();
-    log_d("开始解析 ASCII frame:%d", frame_len);
+    // log_d("开始解析 ASCII frame:%d", frame_len);
 
-    uint8_t slaveAddr; //上位机请求中的从机地
-    uint8_t funcode;   //上位机请求中的从机地址
+    uint8_t asc_slaveAddr = 1; //上位机请求中的从机地
+    uint8_t asc_funcode = 0;   //上位机请求中的从机地址
 
-    uint16_t ReadDatStAdd; //上位机要的读的数据起始
-    int ReadDatLenth;      //上位机要读的数据的长度
+    uint8_t rtu_funCode = 0;
 
-    uint16_t WriteSingleData; // 06 功能码写单个寄存器的数据
+    uint16_t ReadDatStAdd = 0; //上位机要的读的数据起始
+    int ReadDatLenth = 0;      //上位机要读的数据的长度
 
-    int WriteDatStAdd; //上位机要写的数据的起始地址
-    int WriteDatLenth; //上位机要写的数据的长度
-    int WriteByteNum;  //上位机要写的数据的字节长度=数据长度*2
+    uint16_t WriteSingleData = 0; // 06 功能码写单个寄存器的数据
+
+    uint16_t WriteDatStAdd = 0; //上位机要写的数据的起始地址
+    int WriteDatLenth = 0; //上位机要写的数据的长度
+    int WriteByteNum = 0;  //上位机要写的数据的字节长度=数据长度*2
 
     uint8_t lrc = 0; //上位机请求中的 LRC
-    uint8_t calc_lrc = 0;
 
     rt_bool_t isValid = RT_FALSE;
 
-    uint8_t *pWbuf;
+    uint8_t *pwBuf = RT_NULL;
+    char *pAscWbuf = RT_NULL;
+
+    int send_len = 0;
 
     int i = 0, j = 0;
 
-    // for (i = 0; i < frame_len; i++)
-    // {
-    //     rt_kprintf("%02x ", *(ptrFrame + i));
-    // }
-    // rt_kprintf("\n");
+    uint16_t bufLen = 0;
+    uint16_t bytesCnt = 0;        // 3 号功能码回复才有
+    uint16_t wrRegStartAddr = 0; // 16 号功能码回复才有 写入寄存器起始地址
+    uint16_t wrRegCnt = 0;       // 16 号功能码回复才有 写入寄存器数量
+    uint8_t rdRegCnt = 0;        // 23 号功能回复才有，读取结存器数量
+    uint8_t calc_lrc = 0;
+    uint16_t calr_lrc_len = 0;
+    
+    uint16_t rtu_wr_buf[AGILE_MODBUS_MAX_WRITE_REGISTERS];
 
-    for (i = 0; i < frame_len; i++)
+
+    int rc = 0;
+
+    log_d("parse_ascii_frame");
+    if (LOG_LVL == LOG_LVL_DBG)
+    {
+        for (i = 0; i < frame_len; i++)
+        {
+            rt_kprintf("%c", *(ptrFrame + i));
+        }
+    }
+
+    for (i = 0, j = 0; i < frame_len; i++)
     {
         // 查找帧头
         if (*(ptrFrame + i) != ':')
@@ -250,27 +386,104 @@ uint8_t parse_ascii_frame(char *ptrFrame, rt_uint32_t frame_len)
             continue;
         }
         j += 1;
-        slaveAddr = ATOHChar(ptrFrame + i + j);
+        asc_slaveAddr = ATOHChar(ptrFrame + i + j);
         j += 2;
-        // log_d("slaveAddr:%d", slaveAddr);
+        log_d("asc_slaveAddr:%d g_stConfig.ascAddr:%d", asc_slaveAddr, g_stConfig.ascAddr);
 
-        // if (slaveAddr != port->slaveAddr)
+        // if (asc_slaveAddr != g_stConfig.ascAddr)
         // {
         //     LOG_W("Please check the slave addr");
-        //     continue;
+        //     break;
         // }
 
-        funcode = ATOHChar(ptrFrame + i + j);
+        asc_funcode = ATOHChar(ptrFrame + i + j);
         j += 2;
-        // log_d("funcode:0x%02x", funcode);
+        log_d("funcode:0x%02x", asc_funcode);
 
         // if (funcode != 0x17) //功能代码符合0x17
         // {
-        //     LOG_W("Only support 0x17 but got 0x%02x", funcode);
+        //     LOG_W("Only support 0x17 but got 0x%02x", asc_funcode);
         //     continue;
         // }
 
-        if (funcode == 0x03 || funcode == 0x17)
+        if(asc_funcode == 0x03)
+        {
+            ReadDatStAdd = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            // log_d("ReadDatStAdd:%04x", ReadDatStAdd);
+
+            //功能代码23（0x17)要读取的数据起始地址，占4个字节[3]~[6]
+            ReadDatLenth = ATOHInt(ptrFrame + i + j);
+            j += 4;
+        }
+
+        else if (asc_funcode == 0x06)
+        {
+            WriteDatStAdd = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            // log_d("WriteDatStAdd:%04x", WriteDatStAdd); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
+
+            // WriteSingleData = ATOHInt(ptrFrame + i + j);
+
+            // j += 4;
+            // log_d("WriteSingleData:%04x", WriteSingleData); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
+
+            WriteDatLenth = 1;
+            WriteByteNum = 2;
+
+            pAscWbuf = rt_malloc(WriteByteNum);
+            rt_memset(pAscWbuf, '\0', WriteByteNum);
+            for (int k = 0; k < WriteByteNum; k++)
+            {
+                int temp = ATOHChar(ptrFrame + i + j + 2 * k);
+                // rt_kprintf("temp:%02x ", temp);
+                *(pAscWbuf + k) = temp;
+                // rt_kprintf("pAscWbuf:%02x ", *(pAscWbuf + k));
+                // if (k == WriteByteNum)
+                //     rt_kprintf("\r\n");
+            }
+            j += WriteByteNum * 2; //  注意这里是 * 2 ，不是 *4，长度 4 个字节，ASCII 的表示是翻倍的，占用 4*2 个 字节。
+
+        }
+        else if (asc_funcode == 0x10)
+        {
+
+            WriteDatStAdd = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            log_d("WriteDatStAdd:%04x", WriteDatStAdd); //功能代码16（0x10)要写取的数据起始地址，占4个字节[11]~[14]
+            
+            WriteDatLenth = ATOHInt(ptrFrame + i + j); //功能代码16（0x10)要写取的寄存器数量，占4个字节[15]~[18]
+            j += 4;
+            log_d("WriteDatLenth:%04x", WriteDatLenth);
+
+            WriteByteNum = ATOHChar(ptrFrame + i + j); //功能代码16（0x10)要写取的数据字节个数，占2个字节[19]~[20]
+            j += 2;
+            log_d("WriteByteNum:%02x", WriteByteNum);
+
+            if (!(WriteByteNum == WriteDatLenth * 2 && (WriteDatLenth == 0 || (WriteDatLenth > 0 && WriteDatStAdd >= WAddLimitMin && WriteDatStAdd <= WAddLimitMax && WriteDatStAdd + WriteDatLenth >= WAddLimitMin + 1 && WriteDatStAdd + WriteDatLenth <= WAddLimitMax + 1)))) //写的地址和长度符合
+            {
+                //写的数据的起始地址不能超范围，写的数据起始地址+数据长度不能超范围
+                LOG_W("Invalid write parameters");
+                ret = -1;
+                goto exit;
+            }
+
+            pAscWbuf = rt_malloc(WriteByteNum);
+            rt_memset(pAscWbuf, '\0', WriteByteNum);
+            for (int k = 0; k < WriteByteNum; k++)
+            {
+                int temp = ATOHChar(ptrFrame + i + j + 2 * k);
+                // rt_kprintf("temp:%02x ", temp);
+                *(pAscWbuf + k) = temp;
+                // rt_kprintf("pAscWbuf:%02x ", *(pAscWbuf + k));
+                // if (k == WriteByteNum)
+                //     rt_kprintf("\r\n");
+            }
+            j += WriteByteNum * 2; //  注意这里是 * 2 ，不是 *4，长度 4 个字节，ASCII 的表示是翻倍的，占用 4*2 个 字节。
+
+        }
+
+        else if (asc_funcode == 0x17)
         {
             ReadDatStAdd = ATOHInt(ptrFrame + i + j);
             j += 4;
@@ -282,57 +495,58 @@ uint8_t parse_ascii_frame(char *ptrFrame, rt_uint32_t frame_len)
             // log_d("ReadDatLenth:%04x", ReadDatLenth);
 
             //功能代码23（0x17)要读取的数据长度，占4个字节[7]~[10]
-            if (!(ReadDatStAdd >= RAddLimitMin && ReadDatStAdd <= RAddLimitMax && ReadDatStAdd + ReadDatLenth >= RAddLimitMin && ReadDatStAdd + ReadDatLenth <= RAddLimitMax + 1)) //读的地址和长度符合
-            //起始地址不能超范围，起始地址+数据长度不能超范围
+
+            if(!g_stConfig.mapEnable)
             {
-                LOG_W("Invalid read parameters");
-                continue;
+            if (!(ReadDatStAdd >= RAddLimitMin && ReadDatStAdd <= RAddLimitMax && ReadDatStAdd + ReadDatLenth >= RAddLimitMin && ReadDatStAdd + ReadDatLenth <= RAddLimitMax + 1)) //读的地址和长度符合
+                //起始地址不能超范围，起始地址+数据长度不能超范围
+                {
+                    LOG_W("Invalid read parameters");
+                    break;
+                }
+            }else
+            {
+                log_d("启用了地址映射");
             }
-        }
 
-        if (funcode == 0x06)
-        {
+ 
+
             WriteDatStAdd = ATOHInt(ptrFrame + i + j);
             j += 4;
-            // log_d("WriteDatStAdd:%04x", WriteDatStAdd); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
-
-            WriteSingleData = ATOHInt(ptrFrame + i + j);
-            j += 4;
-            // log_d("WriteSingleData:%04x", WriteSingleData); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
-        }
-
-        if (funcode == 0x17)
-        {
-            WriteDatStAdd = ATOHInt(ptrFrame + i + j);
-            j += 4;
-            // log_d("WriteDatStAdd:%04x", WriteDatStAdd); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
+            log_d("WriteDatStAdd:%04x", WriteDatStAdd); //功能代码23（0x17)要写取的数据起始地址，占4个字节[11]~[14]
 
             WriteDatLenth = ATOHInt(ptrFrame + i + j); //功能代码23（0x17)要写取的寄存器数量，占4个字节[15]~[18]
             j += 4;
-            // log_d("WriteDatLenth:%04x", WriteDatLenth);
+            log_d("WriteDatLenth:%04x", WriteDatLenth);
 
             WriteByteNum = ATOHChar(ptrFrame + i + j); //功能代码23（0x17)要写取的数据字节个数，占2个字节[19]~[20]
             j += 2;
-            // log_d("WriteByteNum:%02x", WriteByteNum);
+            log_d("WriteByteNum:%02x", WriteByteNum);
 
             if (!(WriteByteNum == WriteDatLenth * 2 && (WriteDatLenth == 0 || (WriteDatLenth > 0 && WriteDatStAdd >= WAddLimitMin && WriteDatStAdd <= WAddLimitMax && WriteDatStAdd + WriteDatLenth >= WAddLimitMin + 1 && WriteDatStAdd + WriteDatLenth <= WAddLimitMax + 1)))) //写的地址和长度符合
             {
                 //写的数据的起始地址不能超范围，写的数据起始地址+数据长度不能超范围
                 LOG_W("Invalid write parameters");
-                continue;
+                ret = -1;
+                goto exit;
             }
 
-            pWbuf = rt_malloc(WriteByteNum);
+            pAscWbuf = rt_malloc(WriteByteNum);
+            rt_memset(pAscWbuf, '\0', WriteByteNum);
             for (int k = 0; k < WriteByteNum; k++)
             {
                 int temp = ATOHChar(ptrFrame + i + j + 2 * k);
-                rt_kprintf("temp:%02x ", temp);
-                *(pWbuf + k) = temp;
-                rt_kprintf("pWbuf:%02x ", *(pWbuf + k));
-                if (k == WriteByteNum)
-                    rt_kprintf("\n");
+                // rt_kprintf("temp:%02x ", temp);
+                *(pAscWbuf + k) = temp;
+                // rt_kprintf("pAscWbuf:%02x ", *(pAscWbuf + k));
+                // if (k == WriteByteNum)
+                //     rt_kprintf("\r\n");
             }
             j += WriteByteNum * 2; //  注意这里是 * 2 ，不是 *4，长度 4 个字节，ASCII 的表示是翻倍的，占用 4*2 个 字节。
+        }
+        else
+        {
+            log_w("Unknow funcode");
         }
 
         calc_lrc = ASCII_LRC(ptrFrame + 1, j - 1); // j-1 表示不计算 ：
@@ -343,27 +557,51 @@ uint8_t parse_ascii_frame(char *ptrFrame, rt_uint32_t frame_len)
         // }
 
         lrc = ATOHChar(ptrFrame + i + j);
-        log_d("lrc:%02X", lrc);
+        log_d("lrc:%02X calc_lrc:%02X", lrc, calc_lrc);
 
         j += 2;
         if (calc_lrc != lrc || calc_lrc == -1) //LRC校验和判断 -1 表示计算失败
         {
             LOG_W("LRC mismatch!");
-            continue;
+            break;
         }
 
         if (!(*(ptrFrame + i + j) == 0x0D && *(ptrFrame + i + j + 1) == 0x0A)) //结束符0x0D,和0x0A符合
         {
             LOG_W("Not found 0x0D && 0x0A");
-            continue;
+            break;
         }
         isValid = RT_TRUE;
+        break;
+    }
+
+    log_w("i:%d frame_len:%d", i, frame_len);
+
+    if (i == frame_len)
+    {
+        log_e("未找到帧头%d %d", i, frame_len);
+        for (i = 0; i < frame_len; i++)
+        {
+            rt_kprintf("%c", *(ptrFrame + i));
+        }
+        ret = -1;
+        goto exit;
     }
 
     if (!isValid)
     {
-        log_e("解析失败");
-        return 0;
+        log_e("解析失败%d %d", i, frame_len);
+
+        //解析失败，将邮件扔掉 
+        struct SER_PORT *resp_port;
+        if (rt_mb_recv(&asc_resp_mb, (rt_ubase_t *)&resp_port, 1 * RT_TICK_PER_SECOND) == RT_EOK)
+        {
+            log_d("resp_port->dev_name:%s", resp_port->dev_name);
+            // rt_device_write(resp_port->device, 0, pwBuf, bufLen);
+        }
+
+        ret = -1;
+        goto exit;
     }
 
     // NO  Code                         Name                                 Function
@@ -372,35 +610,216 @@ uint8_t parse_ascii_frame(char *ptrFrame, rt_uint32_t frame_len)
     // 3    16(10h)             Preset multiple registers             Writing multiple registers
     // 4    23(17h)             Read/write 4x registers/              Reading/writing multiple registers
 
-    switch (funcode)
+    end = clock();
+    log_d("解析完毕,用时:%dms", end - start);
+
+    switch (asc_funcode)
     {
     case 03:
+        log_d("从机地址:%d", asc_slaveAddr);
+        log_d("功能码:%d Reading multiple registers", asc_funcode);
+        log_d("读起始地址:%d", ReadDatStAdd);
+        log_d("读寄存器数量:%d", ReadDatLenth);
+        if(ReadDatStAdd)
+        {
+            log_d("ReadDatStAdd:%d,%d", ReadDatStAdd, ReadDatLenth);
+
+        }
+        rtu_funCode = *(g_ctx->read_buf + 1);
+        log_d("rtu_funCode:%d", rtu_funCode);
+        
+        bytesCnt = ReadDatLenth * 2;
+
+        // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
+        // 1(:)+(slaveAddr + funCode + bytesCnt + bytes + lrc)*2 +  \r\n
+        bufLen = 1 + (1 + 1 + 1 + bytesCnt + 1) * 2 + 2;
+        calr_lrc_len = bufLen - 5;
+        // log_w("bufLen:%d",bufLen);
+        // 多分配 1 个字节，用于保存 '\0'
+        pwBuf = rt_malloc(bufLen + 1);
+        rt_memset(pwBuf, '\0', bufLen + 1);
+        // 写入 bytesCnt
+        *pwBuf = ':';
+        HToAChar(pwBuf + 1, &asc_slaveAddr, 1,0);
+
+        rtu_funCode = 03; 
+
+        HToAChar(pwBuf + 3, &rtu_funCode, 1,0);
+
+        log_d("bytesCnt:%d",bytesCnt);
+
+        HToAChar(pwBuf + 5, (uint8_t *)&bytesCnt, 1,0);
+        // fixed：+2*ReadDatStAdd
+        HToAChar(pwBuf + 7, g_ctx->read_buf + 3 + 2 * ReadDatStAdd, bytesCnt,0);
+        // log_d("功能码之后 LRC 之前的字符:%s",pwBuf);
+        // LRC 不包括 : \r\n
+        // 2 * (3 + bytesCnt) == bufLen-5
+
+        calc_lrc = ASCII_LRC(pwBuf + 1, calr_lrc_len);
+        log_d("calc_lrc:0x%02X", calc_lrc);
+
+        // 倒数第4个起
+        HToAChar(pwBuf + bufLen - 4, (uint8_t *)&calc_lrc, 1,0);
+        rt_memcpy(pwBuf + bufLen - 2, "\r\n", 2);
+        *(pwBuf + bufLen) = '\0';
+
         break;
     case 06:
+        log_d("从机地址:%d", asc_slaveAddr);
+        log_d("功能码:%d Writing register", asc_funcode);
+        log_d("写地址:%04x", WriteDatStAdd);
+
+        log_d("*(pAscWbuf + 2 * x):%d", *(pAscWbuf));
+        log_d("*(pAscWbuf + 2 * x+1):%d", *(pAscWbuf + 1));
+
+        rtu_wr_buf[0] = (*(pAscWbuf ) << 8) + *(pAscWbuf + 1);
+        log_d("rtu_wr_buf[0]:%d", rtu_wr_buf[0]);
+
+        rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
+
+        send_len = agile_modbus_serialize_write_register(g_ctx,WriteDatStAdd,(const uint16_t )rtu_wr_buf[0]);
+        // send_len = agile_modbus_serialize_write_registers(g_ctx, WriteDatStAdd, WriteDatLenth, (const uint16_t *)&rtu_wr_buf);
+        rs485_send(g_stConfig.serPort[0].device,g_ctx->send_buf, send_len);
+
+
+        char *retBuf = rt_malloc(g_ctx->read_bufsz);
+        rt_memset(retBuf,'\0',g_ctx->read_bufsz);
+        g_read_len = rs485_receive(retBuf, g_ctx->read_bufsz, 1000, g_stConfig.serPort[0].frameInterval);
+        rt_mutex_release(dynamic_mutex);
+
+        log_d("g_read_len:%d", g_read_len);
+        if (g_read_len)
+            log_hex("rtu ret:", 16, retBuf, g_read_len);
+
+        rtu_funCode = *(retBuf + 1);
+
+        // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
+        // 1(:)+(slaveAddr + funCode + regAddress + bytes + lrc)*2 +  \r\n
+        bufLen = 1 + (1 + 1 + 2 + 2 + 1) * 2 + 2;
+        calr_lrc_len = bufLen - 5;
+        // log_w("bufLen:%d",bufLen);
+        // 多分配 1 个字节，用于保存 '\0'
+        pwBuf = rt_malloc(bufLen + 1);
+        rt_memset(pwBuf, '\0', bufLen + 1);
+
+        // :0106000C0001EC
+        *pwBuf = ':';
+        HToAChar(pwBuf + 1, &asc_slaveAddr, 1,0);
+
+        rtu_funCode = 06; 
+
+        HToAChar(pwBuf + 3, &rtu_funCode, 1,0);
+
+        log_d("WriteDatStAdd:%04x",WriteDatStAdd);
+
+        uint16_t convertAddr;
+        convertAddr = ((WriteDatStAdd&0x00ff)<<8)  + ((WriteDatStAdd&0xff00)>>8);
+
+        log_d("convertAddr:%04x",convertAddr);
+
+        HToAChar(pwBuf + 5, (uint8_t *)&convertAddr, 2,0);
+
+        HToAChar(pwBuf + 9, retBuf + 4, 2,0);
+
+        calc_lrc = ASCII_LRC(pwBuf + 1, calr_lrc_len);
+        // log_d("calc_lrc:0x%02X", calc_lrc);
+
+        // // 倒数第4个起
+        HToAChar(pwBuf + bufLen - 4, (uint8_t *)&calc_lrc, 1,0);
+        rt_memcpy(pwBuf + bufLen - 2, "\r\n", 2);
+        *(pwBuf + bufLen) = '\0';
+
+        rt_free(retBuf);
         break;
+
     case 16:
-        break;
-    case 23:
-        log_i("功能码:%d Reading/writing multiple registers", funcode);
-        log_i("从机地址:%d", slaveAddr);
-        log_i("读起始地址:%d", ReadDatStAdd);
-        log_i("读寄存器数量:%d", ReadDatLenth);
-        log_i("写起始地址:%d", WriteDatStAdd);
-        log_i("写寄存器数量:%d", WriteDatLenth);
-        log_i("写字节长度:%d", WriteByteNum);
-        if (WriteByteNum)
+        log_d("从机地址:%d", asc_slaveAddr);
+        log_d("功能码:%d writing multiple registers", asc_funcode);
+        log_d("写起始地址:%d", WriteDatStAdd);
+        log_d("写寄存器数量:%d", WriteDatLenth);
+        log_d("写字节长度:%d", WriteByteNum);
+
+        if (WriteDatLenth)
         {
-            rt_kprintf("写数据:");
-            for (int i = 0; i < WriteByteNum; i++)
+            // if (ReadDatLenth)
+            //     rt_thread_delay(100);
+
+            log_d("准备写入数据: wsa:%d,wdl:%d,wbc:%d,wd:%d", WriteDatStAdd, WriteDatLenth, WriteByteNum, *pAscWbuf);
+
+
+            for (int x = 0; x < WriteDatLenth; x++)
             {
-                rt_kprintf("%02x ", pWbuf[i]);
+                log_d("*(pAscWbuf + 2 * x):%d", *(pAscWbuf + 2 * x));
+                log_d("*(pAscWbuf + 2 * x+1):%d", *(pAscWbuf + 2 * x + 1));
+                rtu_wr_buf[x] = (*(pAscWbuf + 2 * x) << 8) + *(pAscWbuf + 2 * x + 1);
             }
-            rt_kprintf("\n");
+
+            log_d("rtu_wr_buf[0]:%d", rtu_wr_buf[0]);
+
+            rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
+            send_len = agile_modbus_serialize_write_registers(g_ctx, WriteDatStAdd, WriteDatLenth, (const uint16_t *)&rtu_wr_buf);
+            rs485_send(g_stConfig.serPort[0].device,g_ctx->send_buf, send_len);
+
+            char *retBuf = rt_malloc(g_ctx->read_bufsz);
+            rt_memset(retBuf, '\0', g_ctx->read_bufsz);
+            g_read_len = rs485_receive(retBuf, g_ctx->read_bufsz, 1000, g_stConfig.serPort[0].frameInterval);
+            rt_mutex_release(dynamic_mutex);
+            
+            log_d("g_read_len:%d", g_read_len);
+            if (g_read_len)
+                log_hex("rtu ret:", 16, retBuf, g_read_len);
+
+            rtu_funCode = *(retBuf + 1);
+
+
+            bufLen = 1 + (1 + 1 + 2 + 2 + 1) * 2 + 2;
+            calr_lrc_len = bufLen - 5;
+            // log_w("bufLen:%d",bufLen);
+            // 多分配 1 个字节，用于保存 '\0'
+            pwBuf = rt_malloc(bufLen + 1);
+            rt_memset(pwBuf, '\0', bufLen + 1);
+
+            // :0106000C0001EC
+            *pwBuf = ':';
+            HToAChar(pwBuf + 1, &asc_slaveAddr, 1,0);
+
+
+            HToAChar(pwBuf + 3, &rtu_funCode, 1,0);
+
+            log_d("WriteDatStAdd:%04x",WriteDatStAdd);
+
+            uint16_t convertAddr;
+            convertAddr = ((WriteDatStAdd&0x00ff)<<8)  + ((WriteDatStAdd&0xff00)>>8);
+
+            log_d("convertAddr:%04x",convertAddr);
+
+            HToAChar(pwBuf + 5, (uint8_t *)&convertAddr, 2,0);
+
+            HToAChar(pwBuf + 9, retBuf + 4, 2,0);
+
+            calc_lrc = ASCII_LRC(pwBuf + 1, calr_lrc_len);
+            // log_d("calc_lrc:0x%02X", calc_lrc);
+
+            // // 倒数第4个起
+            HToAChar(pwBuf + bufLen - 4, (uint8_t *)&calc_lrc, 1,0);
+            rt_memcpy(pwBuf + bufLen - 2, "\r\n", 2);
+            *(pwBuf + bufLen) = '\0';
+
+            rt_free(retBuf);
+
         }
-        else
-        {
-            log_d("不需要写数据");
-        }
+
+        break;
+
+    case 23:
+        log_d("从机地址:%d", asc_slaveAddr);
+        log_d("功能码:%d Reading/writing multiple registers", asc_funcode);
+        log_d("读起始地址:%d", ReadDatStAdd);
+        log_d("读寄存器数量:%d", ReadDatLenth);
+        log_d("写起始地址:%d", WriteDatStAdd);
+        log_d("写寄存器数量:%d", WriteDatLenth);
+        log_d("写字节长度:%d", WriteByteNum);
+
         // https://www.cnblogs.com/iluzhiyong/p/4929165.html
         // https://blog.csdn.net/liboxiu/article/details/86473516
         // https://www.cnblogs.com/wt88/p/9624373.html
@@ -419,30 +838,297 @@ uint8_t parse_ascii_frame(char *ptrFrame, rt_uint32_t frame_len)
         // 0x06: 写单个保持寄存器                                 W
         // 0x0f: 写多个线圈寄存器                                 W
         // 0x10: 写多个保持寄存器                                 W
+        
 
-        end = clock();
-        log_i("解析完毕,用时:%dms", end - start);
-
-        if (ReadDatLenth)
-        {
-            read_regs(slaveAddr, 3, ReadDatStAdd, ReadDatLenth);
-        }
 
         if (WriteDatLenth)
         {
-            if (ReadDatLenth)
-                rt_thread_delay(100);
-            write_regs(slaveAddr, 16, WriteDatStAdd, WriteDatLenth, WriteByteNum, pWbuf);
+            // if (ReadDatLenth)
+            //     rt_thread_delay(100);
+
+            log_d("准备写入数据: wsa:%d,wdl:%d,wbc:%d,wd:%d", WriteDatStAdd, WriteDatLenth, WriteByteNum, *pAscWbuf);
+
+
+            for (int x = 0; x < WriteDatLenth; x++)
+            {
+                log_d("*(pAscWbuf + 2 * x):%d", *(pAscWbuf + 2 * x));
+                log_d("*(pAscWbuf + 2 * x+1):%d", *(pAscWbuf + 2 * x + 1));
+                rtu_wr_buf[x] = (*(pAscWbuf + 2 * x) << 8) + *(pAscWbuf + 2 * x + 1);
+            }
+
+            log_d("rtu_wr_buf[0]:%d", rtu_wr_buf[0]);
+
+            rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
+            send_len = agile_modbus_serialize_write_registers(g_ctx, WriteDatStAdd, WriteDatLenth, (const uint16_t *)&rtu_wr_buf);
+            rs485_send(g_stConfig.serPort[0].device,g_ctx->send_buf, send_len);
+
+
+            char *retBuf = rt_malloc(g_ctx->read_bufsz);
+            rt_memset(retBuf, '\0', g_ctx->read_bufsz);
+            g_read_len = rs485_receive(retBuf, g_ctx->read_bufsz, 1000, g_stConfig.serPort[0].frameInterval);
+            rt_mutex_release(dynamic_mutex);
+            
+            log_d("g_read_len:%d", g_read_len);
+            if (g_read_len)
+                log_hex("rtu ret:", 16, retBuf, g_read_len);
+
+            rtu_funCode = *(retBuf + 1);
+
+
+            // 写入结果 读取 并判断是否需要重写
+
+            rt_free(retBuf);
+
+            // write_regs(g_stConfig.ascAddr, 16, WriteDatStAdd, WriteDatLenth, WriteByteNum, pAscWbuf);
         }
 
-        free(pWbuf);
+        if (ReadDatLenth)
+        {
+            // log_d("ReadDatStAdd:%d,%d,%d,%d", ReadDatStAdd, ReadDatLenth,g_stConfig.scanRegCnt,g_hold_register);
+            // 根据 asc_slaveAddr 获取 scanTask
+            
+
+
+            // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
+
+            // 如果起始地址超过了扫描寄存器的数量 或者读数据长度超过了扫描寄存器的数量  或者 关闭了扫描功能，那么就直接不能从缓存读取了
+            // ReadDatStAdd > g_stConfig.scanRegCnt || ReadDatLenth > g_stConfig.scanRegCnt
+
+            if (!g_stConfig.scanTask[0].enable)
+            {
+                log_w("透传！");
+                // g_stConfig.scanTask[0].hold
+                // rtu_hold_query(asc_slaveAddr,ReadDatStAdd,100,g_hold_register);
+            }else{
+                log_d("非透传!");
+            }
+
+            // log_hex("rtu frame", 16, g_ctx->read_buf, g_read_len);
+            // 不需要再去校验，agile_modbus_deserialize_read_registers 里边已经有校验
+            // uint16_t rtu_recv_crc = 0;
+            // uint16_t rtu_calc_crc = 0;
+
+            // rtu_recv_crc = *(g_ctx->read_buf + g_read_len - 2) << 8 | *(g_ctx->read_buf + g_read_len - 1);
+            // rtu_calc_crc = CRC(g_ctx->read_buf, g_read_len - 2);
+
+            // log_d("rtu_recv_crc:%04X", rtu_recv_crc);
+            // log_d("rtu_calc_crc:%04X", rtu_calc_crc);
+            // if (rtu_recv_crc != rtu_calc_crc)
+            // {
+            //     log_e("rtu_recv_crc ne rtu_calc_crc");
+            //     rt_memset(g_ctx->read_buf, 0, AGILE_MODBUS_MAX_ADU_LENGTH);
+            //     return -1;
+            // }
+
+            // uint8_t rtu_slaveAddr = *(g_ctx->read_buf);
+            // log_d("rtu_slaveAddr:%d %d", rtu_slaveAddr,g_ctx->slave);
+
+            rtu_funCode = *(g_ctx->read_buf + 1);
+            log_d("rtu_funCode:%d", rtu_funCode);
+
+            // rt_mutex_release(dynamic_mutex);
+            //  RT_TICK_PER_SECOND/100
+        }
+
+   
+        // 如果要回复 16 号指令，那么需要另行考虑
+        // wrRegStartAddr = *(ptrFrame + 2) << 8 | *(ptrFrame + 3);
+        // wrRegCnt = *(ptrFrame + 4) << 8 | *(ptrFrame + 5);
+
+        // 如果强制要求既读又写的回复定以为 :011700E8
+        // 01 10 00 0C 00 01 C1 CA
+        // 如果 23 号指令只写不读，那么固定回复如下
+        // : 01 17 00 E8 \CR\LF
+        // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
+        // 1(:)+(slaveAddr + rtu_funCode + bytesReadCnts+lrc)*2
+        
+        if(0)
+        {
+            bufLen = 1 + (1 + 1 + 1 + 1) * 2 + 2;
+            calr_lrc_len = bufLen - 5;
+            log_w("bufLen:%d", bufLen);
+            pwBuf = rt_malloc(bufLen + 1);
+            rt_memset(pwBuf, '\0', bufLen + 1);
+            *pwBuf = ':';
+            HToAChar(pwBuf + 1, &asc_slaveAddr, 1,0);
+
+            rtu_funCode = 23; // 强制将 03 号回复为 23 号功能码
+            HToAChar(pwBuf + 3, &rtu_funCode, 1,0);
+            uint8_t temp = 0;
+            HToAChar(pwBuf + 5, &temp, 1,0);
+        }
+
+
+
+        // 这里不再考虑 RTU 的功能码，回复给上位机的只有 23 号功能码
+        // switch (rtu_funCode)
+        // {
+        // case 3:
+            
+        //     break;
+
+        // case 16:
+            
+        //     break;
+
+        // default:
+        //     log_e("Not support rtu_funCode:%d", rtu_funCode);
+        //     ret = -1;
+        //     goto exit;
+        //     break;
+        // }
+
+
+        // 读回复
+        // 01 03 1A 00 0C 00 22 00 38 00 4E 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 00 42 C8
+        // : 01 17 1A 0328 0000 0000 0010 0000 0000 0000 0000 0000 0000 0000 0000 0000 93\CR\LF
+        // : 01 17 1A 000C 0022 0038 004E 000C 000C 000C 000C 000C 000C 000C 000C 0001 B9
+
+        bytesCnt = ReadDatLenth * 2;
+
+        // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
+        // 1(:)+(slaveAddr + funCode + bytesCnt + bytes + lrc)*2 +  \r\n
+        bufLen = 1 + (1 + 1 + 1 + bytesCnt + 1) * 2 + 2;
+        calr_lrc_len = bufLen - 5;
+        // log_w("bufLen:%d",bufLen);
+        // 多分配 1 个字节，用于保存 '\0'
+        pwBuf = rt_malloc(bufLen + 1);
+        rt_memset(pwBuf, '\0', bufLen + 1);
+        // 写入 bytesCnt
+        *pwBuf = ':';
+        HToAChar(pwBuf + 1, &asc_slaveAddr, 1,0);
+
+        rtu_funCode = 23; // 强制将 03 号回复为 23 号功能码
+
+        HToAChar(pwBuf + 3, &rtu_funCode, 1,0);
+        HToAChar(pwBuf + 5, (uint8_t *)&bytesCnt, 1,0);
+
+        // ulog_hexdump("rtu_test",16,ptrFrame,frame_len);
+        // ulog_hexdump("dump_g_ctx",16,g_ctx->read_buf,100);
+        // ulog_hexdump("dump_hold0",16,(uint8_t*)g_stConfig.scanTask[0].hold,100);
+        log_d("asc_slaveAddr:%d , bytesCnt:%d",asc_slaveAddr,bytesCnt);
+
+        // fixed：+2*ReadDatStAdd
+        // HToAChar(pwBuf + 7, g_ctx->read_buf + 3 + 2 * ReadDatStAdd, bytesCnt);
+        
+        // 地址有偏移
+   
+        switch(asc_slaveAddr)
+        {
+            case 1:
+                if(ReadDatStAdd == 256)
+                {
+                    log_d("请求的是 400100 需要偏移地址");
+                    log_d("offset:%d",g_stConfig.scanTask[0].offset);
+                    HToAChar(pwBuf + 7,  (uint8_t *)g_stConfig.scanTask[0].hold +  2 * (ReadDatStAdd-256 + g_stConfig.scanTask[0].offset), bytesCnt,1);
+
+                }else
+                {
+                    HToAChar(pwBuf + 7,  (uint8_t *)g_stConfig.scanTask[0].hold +  2 * (ReadDatStAdd + g_stConfig.scanTask[0].offset), bytesCnt,1);
+
+                }
+                break;
+            case 2:
+                if(ReadDatStAdd == 256)
+                {
+                    log_d("请求的是 400100 需要偏移地址");
+                    log_d("offset:%d",g_stConfig.scanTask[1].offset);
+                    HToAChar(pwBuf + 7,  (uint8_t *)g_stConfig.scanTask[0].hold +  2 * (ReadDatStAdd-256 + g_stConfig.scanTask[1].offset), bytesCnt,1);
+                }else
+                {
+                    HToAChar(pwBuf + 7,  (uint8_t *)g_stConfig.scanTask[0].hold +  2 * (ReadDatStAdd + g_stConfig.scanTask[1].offset), bytesCnt,1);
+                }
+
+                break;
+            case 3:
+                if(ReadDatStAdd == 256)
+                {
+                    log_d("请求的是 400100 需要偏移地址");
+                    log_d("offset:%d",g_stConfig.scanTask[2].offset);
+                    HToAChar(pwBuf + 7,  (uint8_t *)g_stConfig.scanTask[0].hold +  2 * (ReadDatStAdd-256 + g_stConfig.scanTask[2].offset), bytesCnt,1);
+
+                }else
+                {
+                    HToAChar(pwBuf + 7,  (uint8_t *)g_stConfig.scanTask[0].hold +  2 * (ReadDatStAdd + g_stConfig.scanTask[2].offset), bytesCnt,1);
+                }
+           
+                break;
+            default:
+                break;
+        }
+
+
+        // ulog_hexdump("dump_pwbuf",16,pwBuf,100);
+
+        // log_d("功能码之后 LRC 之前的字符:%s",pwBuf);
+        // LRC 不包括 : \r\n
+        // 2 * (3 + bytesCnt) == bufLen-5
+
+        calc_lrc = ASCII_LRC(pwBuf + 1, calr_lrc_len);
+        log_d("calc_lrc:0x%02X", calc_lrc);
+
+        // 倒数第4个起
+        HToAChar(pwBuf + bufLen - 4, (uint8_t *)&calc_lrc, 1,0);
+        rt_memcpy(pwBuf + bufLen - 2, "\r\n", 2);
+        *(pwBuf + bufLen) = '\0';
+  
+
         break;
     default:
-        log_w("Not support now!");
+        log_w("Not support asc_funcode:%d", asc_funcode);
         break;
     }
 
-    return 0;
+
+
+    log_d("ready2send:%s", pwBuf);
+
+      // log_i("邮箱中消息的数目:%d",asc_resp_mb.entry);
+    // 统一回复上位机
+    // while (asc_resp_mb.entry > 0)
+    // {
+
+    // 将恢复消息发送到队列
+    struct SER_MSG ser_msg;
+    ser_msg.data_ptr = pwBuf;
+    ser_msg.data_size = bufLen;
+
+    uint32_t result = rt_mq_send(&asc_send_mq, &ser_msg, sizeof(struct SER_MSG));
+    if (result != RT_EOK)
+    {
+        log_e("rt_mq_send asc_send_mq ERR\n");
+
+        //消息存入失败，将邮件扔掉 
+        struct SER_PORT *resp_port;
+        if (rt_mb_recv(&asc_resp_mb, (rt_ubase_t *)&resp_port, 1 * RT_TICK_PER_SECOND) == RT_EOK)
+        {
+            log_d("resp_port->dev_name:%s", resp_port->dev_name);
+            // rt_device_write(resp_port->device, 0, pwBuf, bufLen);
+        }
+
+    }
+
+
+
+    // }
+    // 统一都回复 23 号指令
+    // response_ascii_frame(slaveAddr,23,pwBuf,bufLen);
+    // log_i("send use time:%d", clock() - start);
+    // rt_uint32_t level = rt_hw_interrupt_disable();
+    // rt_hw_interrupt_enable(level);
+
+
+    ret = 0;
+
+exit:
+
+    if (pwBuf)
+        rt_free(pwBuf);
+
+    if (pAscWbuf)
+        rt_free(pAscWbuf);
+
+    return ret;
 }
 
 struct RTU_FRAME
@@ -462,113 +1148,118 @@ uint8_t parse_rtu_frame(char *ptrFrame, rt_uint16_t frame_len)
     rt_uint16_t i = 0;
     char *pwBuf;
 
-    uint16_t recv_crc = 0;
-    uint16_t calc_crc = 0;
+    uint16_t rtu_recv_crc = 0;
+    uint16_t rtu_calc_crc = 0;
 
-    struct SER_PORT *port = &g_stConfig.serPort[1];
+    // log_d("开始解析 RTU frame:%d", frame_len);
 
-    log_d("开始解析 RTU frame:%d", frame_len);
-    for (i = 0; i < frame_len; i++)
-    {
-        rt_kprintf("%02X ", *(ptrFrame + i));
-    }
-    rt_kprintf("\n");
+    ulog_hexdump("rtu_test",16,ptrFrame,frame_len);
 
     // 倒数两个字节是 crc，先计算一下，并判断收到的数据是否正确
-    recv_crc = *(ptrFrame + frame_len - 2 ) << 8 | *(ptrFrame + frame_len -1);
-    log_d("recv_crc:%04X", recv_crc);
-    calc_crc =  CRC(ptrFrame, frame_len-2);  
-    log_d("calc_crc:%04X", calc_crc);
+    rtu_recv_crc = *(ptrFrame + frame_len - 2) << 8 | *(ptrFrame + frame_len - 1);
+    rtu_calc_crc = CRC(ptrFrame, frame_len - 2);
 
-    if(recv_crc != calc_crc)
+    log_d("rtu_recv_crc:%04X", rtu_recv_crc);
+    log_d("rtu_calc_crc:%04X", rtu_calc_crc);
+
+    if (rtu_recv_crc != rtu_calc_crc)
     {
-        log_e("rtu recv_crc mistach calc_crc");
+        log_e("rtu_recv_crc ne rtu_calc_crc");
         return -1;
     }
 
     uint8_t slaveAddr = *ptrFrame;
     uint8_t funCode = *(ptrFrame + 1);
 
-    log_d("slaveAddr:%d", slaveAddr);
-    log_d("funCode:%d", funCode);
+    // log_d("slaveAddr:%d", slaveAddr);
+    log_d("parse_rtu_frame funCode:%d", funCode);
 
-    uint16_t bufLen=0;
-    uint8_t bytesCnt = 0; // 3 号功能码回复才有
-    uint16_t wrRegStartAddr=0; // 16 号功能码回复才有 写入寄存器起始地址
-    uint16_t wrRegCnt=0; // 16 号功能码回复才有 写入寄存器数量
-    uint8_t rdRegCnt=0; // 23 号功能回复才有，读取结存器数量
+    uint16_t bufLen = 0;
+    uint8_t bytesCnt = 0;        // 3 号功能码回复才有
+    uint16_t wrRegStartAddr = 0; // 16 号功能码回复才有 写入寄存器起始地址
+    uint16_t wrRegCnt = 0;       // 16 号功能码回复才有 写入寄存器数量
+    uint8_t rdRegCnt = 0;        // 23 号功能回复才有，读取结存器数量
     uint8_t calc_lrc = 0;
-    // 
-    switch(funCode)
+    //
+    switch (funCode)
     {
 
-        case 3:
-            // 读回复
-            // 01 03 1A 00 0C 00 22 00 38 00 4E 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 00 42 C8
-            // : 01 17 1A 0328 0000 0000 0010 0000 0000 0000 0000 0000 0000 0000 0000 0000 93\CR\LF
-            // : 01 17 1A 000C 0022 0038 004E 000C 000C 000C 000C 000C 000C 000C 000C 0001 B9
-            bytesCnt = *(ptrFrame + 2);
-            // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
-            // 1(:)+(slaveAddr + funCode + bytesCnt + bytes)*2 + lrc + \r\n
-            bufLen = 1+(1+1+1+bytesCnt+1) * 2 + 2;
-            log_w("bufLen:%d",bufLen);
-            // 多分配 1 个字节，用于保存 '\0'
-            pwBuf = rt_malloc(bufLen+1);
-            // 写入 bytesCnt
-            *pwBuf = ':';
-            HToAChar(pwBuf + 1, &slaveAddr, 1);
+    case 3:
+        // 读回复
+        // 01 03 1A 00 0C 00 22 00 38 00 4E 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 0C 00 00 42 C8
+        // : 01 17 1A 0328 0000 0000 0010 0000 0000 0000 0000 0000 0000 0000 0000 0000 93\CR\LF
+        // : 01 17 1A 000C 0022 0038 004E 000C 000C 000C 000C 000C 000C 000C 000C 0001 B9
+        bytesCnt = *(ptrFrame + 2);
+        // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
+        // 1(:)+(slaveAddr + funCode + bytesCnt + bytes)*2 + lrc + \r\n
+        bufLen = 1 + (1 + 1 + 1 + bytesCnt + 1) * 2 + 2;
+        // log_w("bufLen:%d",bufLen);
+        // 多分配 1 个字节，用于保存 '\0'
+        pwBuf = rt_malloc(bufLen + 1);
+        rt_memset(pwBuf, '\0', bufLen + 1);
+        // 写入 bytesCnt
+        *pwBuf = ':';
+        HToAChar(pwBuf + 1, &slaveAddr, 1,0);
 
-            funCode = 23; // 强制将 03 号回复为 23 号功能码
-            
-            HToAChar(pwBuf + 3, &funCode, 1);
-            HToAChar(pwBuf + 5, &bytesCnt, 1);
-            HToAChar(pwBuf + 7, ptrFrame + 3, bytesCnt);
-            log_d("功能码之后 LRC 之前的字符:%s",pwBuf);
-            // LRC 不包括 : \r\n
-            // 2 * (3 + bytesCnt) == bufLen-5
+        funCode = 23; // 强制将 03 号回复为 23 号功能码
 
-           
-            break;
-        case 16:
-            // 写回复
-            // 01 10 00 0C 00 01 C1 CA 
-            // 如果要回复 16 号指令，那么需要另行考虑
-            wrRegStartAddr =  *(ptrFrame + 2 ) << 8 | *(ptrFrame + 3);         
-            wrRegCnt =   *(ptrFrame + 4 ) << 8 | *(ptrFrame + 5);      
-            // 如果 23 号指令只写不读，那么固定回复如下
-            // : 01 17 00 E8 \CR\LF 
-            // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
-            // 1(:)+(slaveAddr + funCode + bytesReadCnts+lrc)*2
-            bufLen = 1+(1+1+1+1) * 2 + 2;
-            log_w("bufLen:%d",bufLen);
-            pwBuf = rt_malloc(bufLen+1);
-            *pwBuf = ':';
-            HToAChar(pwBuf + 1, &slaveAddr, 1);
-            funCode = 23; // 强制将 03 号回复为 23 号功能码
-            HToAChar(pwBuf + 3, &funCode, 1);
-            HToAChar(pwBuf + 5, &rdRegCnt, 1);
-            break;
-        default:
-            log_e("Not support");
-            break;
+        HToAChar(pwBuf + 3, &funCode, 1,0);
+        HToAChar(pwBuf + 5, &bytesCnt, 1,0);
+        HToAChar(pwBuf + 7, ptrFrame + 3, bytesCnt,1);
+        // log_d("功能码之后 LRC 之前的字符:%s",pwBuf);
+        // LRC 不包括 : \r\n
+        // 2 * (3 + bytesCnt) == bufLen-5
+        break;
+    case 16:
+        // 写回复
+        // 01 10 00 0C 00 01 C1 CA
+        // 如果要回复 16 号指令，那么需要另行考虑
+        wrRegStartAddr = *(ptrFrame + 2) << 8 | *(ptrFrame + 3);
+        wrRegCnt = *(ptrFrame + 4) << 8 | *(ptrFrame + 5);
+        // 如果 23 号指令只写不读，那么固定回复如下
+        // : 01 17 00 E8 \CR\LF
+        // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
+        // 1(:)+(slaveAddr + funCode + bytesReadCnts+lrc)*2
+        bufLen = 1 + (1 + 1 + 1 + 1) * 2 + 2;
+        log_w("bufLen:%d", bufLen);
+        pwBuf = rt_malloc(bufLen + 1);
+        rt_memset(pwBuf, '\0', bufLen + 1);
+        *pwBuf = ':';
+        HToAChar(pwBuf + 1, &slaveAddr, 1,0);
+        funCode = 23; // 强制将 03 号回复为 23 号功能码
+        HToAChar(pwBuf + 3, &funCode, 1,0);
+        HToAChar(pwBuf + 5, &rdRegCnt, 1,0);
+        break;
+    default:
+        log_e("Not support");
+        break;
     }
 
     // 计算 lrc ，等于 bufLen - :(1) - lrc(2) - \r\n(2)
-    calc_lrc = ASCII_LRC(pwBuf + 1, bufLen-5); 
+    calc_lrc = ASCII_LRC(pwBuf + 1, bufLen - 5);
     log_d("calc_lrc:0x%02X", calc_lrc);
 
-     // 倒数第4个起
-    HToAChar(pwBuf + bufLen - 4, (uint8_t *)&calc_lrc, 1);
+    // 倒数第4个起
+    HToAChar(pwBuf + bufLen - 4, (uint8_t *)&calc_lrc, 1,0);
     rt_memcpy(pwBuf + bufLen - 2, "\r\n", 2);
-    *(pwBuf+bufLen) = '\0';
-    log_i("read2send:%s",pwBuf);
-    rt_device_write(port->device, 0, pwBuf, bufLen);
+    *(pwBuf + bufLen) = '\0';
+    // log_i("read2send:%s",pwBuf);
+
+    // struct SER_PORT resp_port;
+
+    //  RT_TICK_PER_SECOND/100
 
     // 统一都回复 23 号指令
     // response_ascii_frame(slaveAddr,23,pwBuf,bufLen);
-    if(pwBuf)
+    if (pwBuf)
         free(pwBuf);
 }
+
+static rt_err_t uart_tx_com(rt_device_t dev,void *buffer)
+{
+    log_d("%s 发送完毕",dev->parent.name);
+}
+
 
 /* 接收数据回调函数 */
 static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size)
@@ -605,29 +1296,59 @@ static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size)
 }
 
 extern void serial_thread_entry(void *parameter);
+#define THREAD_TIMESLICE 5
+#define THREAD_PRIORITY 5
+#define THREAD_STACK_SIZE 1024
+
 
 int init_ser_ports()
 {
     rt_err_t ret = RT_EOK;
     char uart_name[RT_NAME_MAX];
-
     struct serial_configure temp_config = RT_SERIAL_CONFIG_DEFAULT;
 
-    cJSON *ports;
+    cJSON *ports, *scan;
     cJSON *port, *tempObj;
 
     ports = cJSON_GetObjectItem(g_root, "ports");
     int iArrayCnt = cJSON_GetArraySize(ports);
     log_d("iArrayCnt:%d", iArrayCnt);
 
+    scan = cJSON_GetObjectItem(g_root, "scan");
+
+    // bug: 这里获取不到 bool 的正真值，永远返回的都是 0！！！！！
+    tempObj = cJSON_GetObjectItem(scan, "test");
+    log_d("%s %d", tempObj->string, tempObj->valueint);
+    tempObj = cJSON_GetObjectItem(scan, "test1");
+    log_d("%s %d", tempObj->string, tempObj->valueint);
+
+    // log_d("g_stConfig.scanEnable:%d", g_stConfig.scanEnable);
+    // tempObj = cJSON_GetObjectItem(scan, "scanEnable");
+    // if (NULL == tempObj)
+    // {
+    //     log_e("get item faild!");
+    // }
+    // g_stConfig.scanEnable = tempObj->valueint;
+    // log_d("g_stConfig.scanEnable:%s %d,%d", tempObj->string, g_stConfig.scanEnable, tempObj->valueint);
+
+    // tempObj = cJSON_GetObjectItem(scan, "scanInv");
+    // g_stConfig.scanInv = tempObj->valueint;
+    // log_d("g_stConfig.scanInv:%d", g_stConfig.scanInv);
+
+    // tempObj = cJSON_GetObjectItem(scan, "scanStAddr");
+    // g_stConfig.scanStAddr = tempObj->valueint;
+
+    // tempObj = cJSON_GetObjectItem(scan, "scanRegCnt");
+    // g_stConfig.scanRegCnt = tempObj->valueint;
+
     for (int i = 0; i < iArrayCnt; i++)
     {
+
         // 先赋值为默认值
         g_stConfig.serPort[i].config = temp_config;
 
         port = cJSON_GetArrayItem(ports, i);
         tempObj = cJSON_GetObjectItem(port, "name");
-
         log_d("default:g_stConfig.serPort[%d].dev_name %s", i, g_stConfig.serPort[i].dev_name);
         log_d("---get name:%s type:%d value:%s", tempObj->string, tempObj->type, tempObj->valuestring);
 
@@ -636,46 +1357,49 @@ int init_ser_ports()
         log_d("new:g_stConfig.serPort[%d].dev_name %s", i, g_stConfig.serPort[i].dev_name);
 
         // 设置波特率
+        tempObj = cJSON_GetObjectItem(port, "baudrate");
         log_d("default:g_stConfig.serPort[%d].config.baud_rate %d", i, g_stConfig.serPort[i].config.baud_rate);
-        tempObj = cJSON_GetObjectItem(port, "baud_rate");
         log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type, tempObj->valueint);
         g_stConfig.serPort[i].config.baud_rate = tempObj->valueint;
         log_d("new:g_stConfig.serPort[%d].config.baud_rate %d", i, g_stConfig.serPort[i].config.baud_rate);
 
-        // 设置帧间隔
-        g_stConfig.serPort[i].frameInterval = 10000 / g_stConfig.serPort[i].config.baud_rate + 1;
+        // 依据波特率，设置帧间隔
+        // g_stConfig.serPort[i].frameInterval = 10000 / g_stConfig.serPort[i].config.baud_rate + 2 + 2;
+        g_stConfig.serPort[i].frameInterval = 10;
         log_d("new:g_stConfig.serPort[%d].frameInterval %d", i, g_stConfig.serPort[i].frameInterval);
 
         // 设置数据位
+        tempObj = cJSON_GetObjectItem(port, "databits");
         log_d("default:g_stConfig.serPort[%d].config.data_bits %d", i, g_stConfig.serPort[i].config.data_bits);
-        tempObj = cJSON_GetObjectItem(port, "data_bits");
         log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type, tempObj->valueint);
         g_stConfig.serPort[i].config.data_bits = tempObj->valueint;
         log_d("new:g_stConfig.serPort[%d].config.data_bits %d", i, g_stConfig.serPort[i].config.data_bits);
 
         // 设置停止位
+        tempObj = cJSON_GetObjectItem(port, "stopbits");
         log_d("default:g_stConfig.serPort[%d].config.stop_bits %d", i, g_stConfig.serPort[i].config.stop_bits);
-        tempObj = cJSON_GetObjectItem(port, "stop_bits");
         log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type, tempObj->valueint);
         g_stConfig.serPort[i].config.stop_bits = tempObj->valueint;
         log_d("new:g_stConfig.serPort[%d].config.stop_bits %d", i, g_stConfig.serPort[i].config.stop_bits);
 
         // 设置奇偶校验
-        log_d("default:g_stConfig.serPort[%d].config.parity %d", i, g_stConfig.serPort[i].config.parity);
         tempObj = cJSON_GetObjectItem(port, "parity");
+        log_d("default:g_stConfig.serPort[%d].config.parity %d", i, g_stConfig.serPort[i].config.parity);
         log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type, tempObj->valueint);
         g_stConfig.serPort[i].config.parity = tempObj->valueint;
         log_d("new:g_stConfig.serPort[%d].config.parity %d", i, g_stConfig.serPort[i].config.parity);
 
         // 设置 bufsz
-        log_d("default:g_stConfig.serPort[%d].config.bufsz %d", i, g_stConfig.serPort[i].config.bufsz);
         tempObj = cJSON_GetObjectItem(port, "bufsz");
+        log_d("default:g_stConfig.serPort[%d].config.bufsz %d", i, g_stConfig.serPort[i].config.bufsz);
         log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type, tempObj->valueint);
         g_stConfig.serPort[i].config.bufsz = tempObj->valueint;
         log_d("new:g_stConfig.serPort[%d].config.bufsz %d", i, g_stConfig.serPort[i].config.bufsz);
 
+
         rt_kprintf("dev_name:%s\n", g_stConfig.serPort[i].dev_name);
         rt_strncpy(uart_name, g_stConfig.serPort[i].dev_name, RT_NAME_MAX);
+
         g_stConfig.serPort[i].device = rt_device_find(uart_name);
 
         if (g_stConfig.serPort[i].device == NULL)
@@ -686,11 +1410,7 @@ int init_ser_ports()
         }
         rt_kprintf("Find %s.\n", uart_name);
 
-        // g_stConfig.serPort[i].config.baud_rate = BAUD_RATE_9600; //修改波特率为 115200
-        // g_stConfig.serPort[i].config.data_bits = DATA_BITS_8;    //数据位 8
-        // g_stConfig.serPort[i].config.stop_bits = STOP_BITS_1;    //停止位 1
-        // g_stConfig.serPort[i].config.bufsz = 128;                //修改缓冲区 buff size 为 128
-        // g_stConfig.serPort[i].config.parity = PARITY_NONE;       //无奇偶校验位
+        // https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart
 
         rt_device_control(g_stConfig.serPort[i].device, RT_DEVICE_CTRL_CONFIG, &g_stConfig.serPort[i].config);
 
@@ -700,6 +1420,12 @@ int init_ser_ports()
 
         /* 设置接收回调函数 */
         rt_device_set_rx_indicate(g_stConfig.serPort[i].device, uart_rx_ind);
+
+        /* 设置发送完成回调函数 没有作用，驱动不支持*/
+        rt_device_set_tx_complete(g_stConfig.serPort[i].device, uart_tx_com);
+
+        /* 没有作用，驱动不支持*/ 
+        // rt_device_control(g_stConfig.serPort[i].device, RT_DEVICE_CTRL_SET_INT,RT_DEVICE_FLAG_INT_TX);
 
         /* 初始化信号量 */
         char sem_name[10] = {'\0'};
@@ -712,12 +1438,16 @@ int init_ser_ports()
 
         memset(g_stConfig.serPort[i].rx_buf, 0, MAX_BUF_LENGTH);
         g_stConfig.serPort[i].CanRecv = MAX_BUF_LENGTH;
-
         char thread_name[10] = {'\0'};
 
         sprintf(thread_name, "th_%s", g_stConfig.serPort[i].dev_name);
+
+        // 对 RTU 口不在再通过线程被动读取，而是采用主动控制的方式
+        if (i == 0)
+            continue;
         /* 创建 serial 线程 */
-        rt_thread_t thread = rt_thread_create(thread_name, (void (*)(void *parameter))serial_thread_entry, (void *)i, 1024, 25, 10);
+
+        rt_thread_t thread = rt_thread_create(thread_name, (void (*)(void *parameter))serial_thread_entry, (void *)i, THREAD_STACK_SIZE, THREAD_PRIORITY, THREAD_TIMESLICE);
         /* 创建成功则启动线程 */
         if (thread != RT_NULL)
         {
@@ -729,14 +1459,6 @@ int init_ser_ports()
             ret = rt_device_close(g_stConfig.serPort[i].device);
             goto exit;
         };
-
-        // 如果是 ascii 端口则需要通中断方式来获取数据
-        if (!rt_strcmp(g_stConfig.serPort[i].prot, "ascii"))
-        {
-        }
-        else
-        {
-        }
     }
 
     return 0;
@@ -744,4 +1466,148 @@ int init_ser_ports()
 exit:
     RT_ASSERT(ret == RT_EOK);
     return ret;
+}
+
+int rs485_send(rt_device_t dev,uint8_t *buf, int len)
+{
+
+    // struct SER_PORT *port = &g_stConfig.serPort[0];
+    // rt_device_write(port->device, 0, buf, len);
+
+    // ulog_hexdump("rs485_send",16,buf,len);
+    rt_device_write(dev, 0, buf, len);
+    
+    // if (!rt_strcmp((char *)dev->parent.name, "uart6"))
+    // {
+    //  log_e("%s 发送完毕",dev->parent.name);
+    // }
+    return len;
+}
+// timeout:要求下位机必须在 timeout 时间内回复，否则会认为读取超时
+int rs485_receive(uint8_t *buf, int bufsz, int timeout, int bytes_timeout)
+{
+    int len = 0;
+    struct SER_PORT *port = &g_stConfig.serPort[0];
+    
+    while (1)
+    {
+        rt_sem_control(&g_stConfig.serPort[0].rx_sem, RT_IPC_CMD_RESET, RT_NULL);
+
+        int rc = rt_device_read(port->device, 0, buf + len, bufsz);
+        // log_d("rc:%d",rc);
+        // log_d("bufsz:%d",bufsz);
+
+        if (rc > 0)
+        {
+            // timeout = bytes_timeout;
+            len += rc;
+            bufsz -= rc;
+            if (bufsz == 0)
+                break;
+            continue;
+        }
+
+        if (rt_sem_take(&g_stConfig.serPort[0].rx_sem, rt_tick_from_millisecond(timeout)) != RT_EOK)
+        {
+            // log_w("读取超时");
+            break;
+        }
+        // timeout = bytes_timeout;
+    }
+
+    // ulog_hexdump("rs485_receive",16,buf,len);
+
+    return len;
+}
+
+ALIGN(RT_ALIGN_SIZE)
+static char thread_rtu_master_stack[1024];
+static struct rt_thread thread_rtu_master;
+
+static void thread_rtu_master_entry(void *parameter)
+{
+
+    // 13*16 - 3 =  208
+    //
+    uint8_t ctx_send_buf[AGILE_MODBUS_MAX_ADU_LENGTH];
+    uint8_t ctx_read_buf[SCAN_READ_BYTES]; //AGILE_MODBUS_MAX_ADU_LENGTH
+    uint8_t temp[SCAN_READ_BYTES];
+    // agile_modbus_rtu_t ctx_rtu;
+    // agile_modbus_t *ctx = &ctx_rtu._ctx;
+
+    agile_modbus_rtu_init(&g_ctx_rtu, ctx_send_buf, sizeof(ctx_send_buf), ctx_read_buf, sizeof(ctx_read_buf));
+
+    int i =0 ,got_ascAddr = 0,cnt=0,send_len = 0, read_len = 0, rc = 0;
+
+    for(i =0;i<3;i++)
+    {
+        // 分配三个系统 hold 所需要的缓存
+        if(g_stConfig.scanTask[i].hold ==0 && g_stConfig.scanTask[i].enable)
+        {
+            // 分配寄存器地址
+            log_d("分配scan %d hold",i);
+            g_stConfig.scanTask[i].hold = rt_malloc(sizeof(uint16_t) * g_stConfig.scanTask[0].cnt);
+            rt_memset(g_stConfig.scanTask[i].hold,0,sizeof(uint16_t) * g_stConfig.scanTask[0].cnt);
+        }
+    }
+
+    while (1)
+    {
+        // 总扫描开关
+        if(!g_stConfig.scanEnable)
+        {
+            rt_thread_delay(1000);
+            continue;
+        }
+        for(i =0;i<3;i++)
+        {
+            // log_d("i:%d",i,g_stConfig.scanTask[i].enable);
+            if(g_stConfig.scanTask[i].enable)
+            {
+
+                // log_d(
+                //     "n:%s,e:%d,a:%d",
+                //     g_stConfig.scanTask[i].name,
+                //     g_stConfig.scanTask[i].enable,
+                //     g_stConfig.scanTask[i].slaveAddr
+                // );
+
+                rc = rtu_hold_query(
+                        g_stConfig.scanTask[i].slaveAddr,
+                        g_stConfig.scanTask[i].regAddr,
+                        g_stConfig.scanTask[i].cnt,
+                        g_stConfig.scanTask[i].hold
+                );
+                // ulog_hexdump("dump_hold",16,(uint8_t *)g_stConfig.scanTask[i].hold,g_stConfig.scanTask[i].cnt * 2);
+                // for(int j = 0;j<100;j++)
+                //     log_d("j:%d,v:%d",j,g_stConfig.scanTask[i].hold[j]);
+                
+                // log_d("asc 地址:%d",g_stConfig.scanTask[i].hold[90+i]);
+                // 设置 slaveAddr 地址
+                g_stConfig.scanTask[i].slaveAddr = g_stConfig.scanTask[i].hold[90+i];
+                // rt_thread_delay(g_stConfig.scanTask[i].inv);
+            }
+        }
+
+        rt_thread_delay(3000);
+    }
+}
+
+int init_rtu_master()
+{
+    dynamic_mutex = rt_mutex_create("dmutex", RT_IPC_FLAG_PRIO);
+    if (dynamic_mutex == RT_NULL)
+    {
+        rt_kprintf("create dynamic mutex failed.\n");
+        return -1;
+    }
+
+    rt_thread_init(&thread_rtu_master,
+                   "thread_rtu_master",
+                   thread_rtu_master_entry,
+                   RT_NULL,
+                   &thread_rtu_master_stack[0],
+                   sizeof(thread_rtu_master_stack), THREAD_PRIORITY + 1, THREAD_TIMESLICE);
+
+    rt_thread_startup(&thread_rtu_master);
 }

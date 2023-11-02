@@ -1,9 +1,8 @@
 #include "utils.h"
 
 #define LOG_TAG "utils"
-#define LOG_LVL LOG_LVL_DBG
+#define LOG_LVL LOG_LVL_ERROR
 #include <ulog.h>
-
 
 //ASCII 字符串 转8位16进制数 '12'转为0x12
 char ATOHChar(char *var) 
@@ -66,13 +65,37 @@ int ATOHInt(char *var)
     return temp;
 }
 
+void endian_convert_int16(int16_t *buf, size_t size) {
+
+  for(size_t i = 0; i < size; i++) {
+    int16_t value = buf[i];
+    uint8_t *byte1 = (uint8_t*)&value; 
+    uint8_t *byte2 = (uint8_t*)&value + 1;
+    
+    uint8_t temp = *byte1;
+    *byte1 = *byte2; 
+    *byte2 = temp;
+
+    buf[i] = value;
+  }
+
+}
+
 //12=>31,32
-int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint8_t len) 
+// 如果 endian false ,就不进行 16 进制字节顺序转换,否则需要
+
+int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len,uint8_t endian) 
 {
     char temp = 0;
     char nibble[2]; // nibble 半字节的意思
     int i = 0, j = 0;
-    char buffer[128];
+
+    if(endian)
+    {
+        endian_convert_int16((int16_t *)pSrcHex,len/2);
+    }
+    
+    char *buffer = rt_malloc(2*len);
 
     for (i = 0; i < len; i++)
     {
@@ -100,6 +123,7 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint8_t len)
 
     buffer[2 * len] = 0x00;
     rt_memcpy(pDstAsc, buffer, 2 * len);
+    rt_free(buffer);
     pDstAsc[2 * len] = 0x00;
     return 1;
 }
@@ -109,7 +133,7 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint8_t len)
 // http://www.ip33.com/lrc.html
 // 如果内容本身是已经 ASCII 转换过后的 buf
 // 计算从 ： 之后的所有数据
-int HEX_LRC(uint8_t *buf, uint8_t len)
+int HEX_LRC(uint8_t *buf, uint16_t len)
 {
     int result = 0;
     // log_d("HEX_LRC:");
@@ -123,8 +147,8 @@ int HEX_LRC(uint8_t *buf, uint8_t len)
     return 256 - (result % 256);
 }
 
-// 如果是对 ASCII buf 直接进行计算，则需要先收聚 ASCII，然后再计算
-int ASCII_LRC(uint8_t *buf, uint8_t len)
+// 如果是对 ASCII buf 直接进行计算，则需要先转换为HEX，然后再计算
+int ASCII_LRC(uint8_t *buf, uint16_t len)
 {
     int result = 0;
     // 先要对 ASCII 转换为 16 进制
@@ -138,6 +162,7 @@ int ASCII_LRC(uint8_t *buf, uint8_t len)
     // }
     // rt_kprintf("\n");
 
+    log_hex("ascc lrc",16,buf,len);
     
     if (len % 2 != 0)
     {
@@ -146,7 +171,7 @@ int ASCII_LRC(uint8_t *buf, uint8_t len)
     }
 
     uint8_t *hBuf;
-    uint8_t hLen = len / 2; // len：整个 frame -1(:) - 4(lrc),注意 lrc 一个字节，但是是两个字符
+    uint16_t hLen = len / 2; // len：整个 frame -1(:) - 4(lrc),注意 lrc 一个字节，但是是两个字符
 
     // log_d("hLen:%d", hLen);
 

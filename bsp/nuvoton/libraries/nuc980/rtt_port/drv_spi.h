@@ -19,6 +19,8 @@
 #include "NuMicro.h"
 #include <nu_bitutil.h>
 
+#include <drv_sys.h>
+
 #if defined(BSP_USING_SPI_PDMA)
     #include <drv_pdma.h>
 #endif

@@ -11,7 +11,6 @@
 #define RT_THREAD_PRIORITY_32
 #define RT_THREAD_PRIORITY_MAX 32
 #define RT_TICK_PER_SECOND 1000
-#define RT_USING_OVERFLOW_CHECK
 #define RT_USING_HOOK
 #define RT_USING_IDLE_HOOK
 #define RT_IDLE_HOOK_LIST_SIZE 4
@@ -21,6 +20,8 @@
 
 #define RT_DEBUG
 #define RT_DEBUG_COLOR
+#define RT_DEBUG_MODULE_CONFIG
+#define RT_DEBUG_MODULE 1
 
 /* Inter-Thread communication */
 
@@ -36,7 +37,6 @@
 #define RT_USING_MEMPOOL
 #define RT_USING_MEMHEAP
 #define RT_USING_SMALL_MEM
-#define RT_USING_MEMTRACE
 #define RT_USING_HEAP
 
 /* Kernel Device Object */
@@ -104,14 +104,13 @@
 #define RT_PIPE_BUFSZ 512
 #define RT_USING_SYSTEM_WORKQUEUE
 #define RT_SYSTEM_WORKQUEUE_STACKSIZE 5120
-#define RT_SYSTEM_WORKQUEUE_PRIORITY 23
+#define RT_SYSTEM_WORKQUEUE_PRIORITY 10
 #define RT_USING_SERIAL
 #define RT_SERIAL_USING_DMA
 #define RT_SERIAL_RB_BUFSZ 2048
-#define RT_USING_CAN
 #define RT_USING_HWTIMER
 #define RT_USING_CPUTIME
-#define RT_USING_I2C
+#define RT_USING_PHY
 #define RT_USING_PIN
 #define RT_USING_MTD_NAND
 #define RT_MTD_NAND_DEBUG
@@ -187,8 +186,8 @@
 
 /* Static IPv4 Address */
 
-#define RT_LWIP_IPADDR "192.168.1.100"
-#define RT_LWIP_GWADDR "192.168.1.1"
+#define RT_LWIP_IPADDR "192.168.2.200"
+#define RT_LWIP_GWADDR "192.168.2.1"
 #define RT_LWIP_MSKADDR "255.255.255.0"
 #define RT_LWIP_UDP
 #define RT_LWIP_TCP
@@ -275,53 +274,7 @@
 #define WEBNET_CACHE_LEVEL 0
 #define WEBNET_USING_SAMPLES
 #define PKG_USING_WEBNET_LATEST_VERSION
-#define PKG_USING_CJSON
-#define PKG_USING_CJSON_V1714
-#define PKG_USING_FREEMODBUS
-#define PKG_MODBUS_MASTER
-
-/* advanced configuration */
-
-#define RT_M_DISCRETE_INPUT_START 0
-#define RT_M_DISCRETE_INPUT_NDISCRETES 16
-#define RT_M_COIL_START 0
-#define RT_M_COIL_NCOILS 64
-#define RT_M_REG_INPUT_START 0
-#define RT_M_REG_INPUT_NREGS 100
-#define RT_M_REG_HOLDING_START 0
-#define RT_M_REG_HOLDING_NREGS 100
-#define RT_M_HD_RESERVE 0
-#define RT_M_IN_RESERVE 0
-#define RT_M_CO_RESERVE 0
-#define RT_M_DI_RESERVE 0
-#define PKG_MODBUS_MASTER_RTU
-#define PKG_MODBUS_MASTER_SAMPLE
-#define MB_SAMPLE_TEST_SLAVE_ADDR 1
-#define MB_MASTER_USING_PORT_NUM 8
-#define MB_MASTER_USING_PORT_BAUDRATE 9600
-#define PKG_MODBUS_SLAVE
-
-/* advanced configuration */
-
-#define RT_S_DISCRETE_INPUT_START 0
-#define RT_S_DISCRETE_INPUT_NDISCRETES 16
-#define RT_S_COIL_START 0
-#define RT_S_COIL_NCOILS 64
-#define RT_S_REG_INPUT_START 0
-#define RT_S_REG_INPUT_NREGS 100
-#define RT_S_REG_HOLDING_START 0
-#define RT_S_REG_HOLDING_NREGS 100
-#define RT_S_HD_RESERVE 0
-#define RT_S_IN_RESERVE 0
-#define RT_S_CO_RESERVE 0
-#define RT_S_DI_RESERVE 0
-#define PKG_MODBUS_SLAVE_RTU
-#define PKG_MODBUS_SLAVE_ASCII
-#define PKG_MODBUS_SLAVE_SAMPLE
-#define MB_SAMPLE_SLAVE_ADDR 1
-#define MB_SLAVE_USING_PORT_NUM 1
-#define MB_SLAVE_USING_PORT_BAUDRATE 115200
-#define PKG_USING_FREEMODBUS_LATEST_VERSION
+#define PKG_WEBNET_VER_NUM 0x99999
 
 /* Wi-Fi */
 
@@ -345,39 +298,9 @@
 
 /* IoT Cloud */
 
-#define PKG_USING_ALI_IOTKIT
-#define PKG_USING_ALI_IOTKIT_PRODUCT_KEY "a1xjyLUq9Cv"
-#define PKG_USING_ALI_IOTKIT_PRODUCT_SECRET "9dAIUclczImpDFVy"
-#define PKG_USING_ALI_IOTKIT_DEVICE_NAME "test01"
-#define PKG_USING_ALI_IOTKIT_DEVICE_SECRET "80c4f99f5f48e359f190f4a85a30d09e"
-#define PKG_ALI_IOTKIT_SELECT_ITEM
-#define PLATFORM_HAS_STDINT
-#define PLATFORM_HAS_DYNMEM
-#define PLATFORM_HAS_OS
-#define INFRA_STRING
-#define INFRA_NET
-#define INFRA_LIST
-#define INFRA_TIMER
-#define INFRA_JSON_PARSER
-#define INFRA_MD5
-#define INFRA_SHA256
-#define INFRA_REPORT
-#define INFRA_HTTPC
-#define INFRA_COMPAT
-#define DEV_SIGN
-#define MQTT_COMM_ENABLED
-
-/* MQTT Configurations */
-
-#define MQTT_DEFAULT_IMPL
-#define MQTT_DIRECT
-#define DEVICE_MODEL_CLASSIC
-#define OTA_ENABLED
-#define PKG_USING_ALI_IOTKIT_SAMPLES
-#define PKG_USING_ALI_IOTKIT_MQTT_SAMPLE
-#define PKG_USING_ALI_IOTKIT_OTA_SAMPLE
-#define PKG_USING_ALI_IOTKIT_LATEST_VERSION
-#define PKG_ALI_IOTKIT_VER_NUM 0x99999
+#define PKG_USING_AGILE_MODBUS
+#define PKG_USING_AGILE_MODBUS_LATEST_VERSION
+#define PKG_AGILE_MODBUS_VER_NUM 0x99999
 
 /* security packages */
 
@@ -392,6 +315,13 @@
 
 /* language packages */
 
+/* JSON: JavaScript Object Notation, a lightweight data-interchange format */
+
+#define PKG_USING_CJSON
+#define PKG_USING_CJSON_LATEST_VERSION
+
+/* XML: Extensible Markup Language */
+
 
 /* multimedia packages */
 
@@ -403,10 +333,16 @@
 
 /* tools packages */
 
+#define PKG_USING_URLENCODE
+#define URLENCODE_USING_SAMPLES
+#define PKG_USING_URLENCODE_LATEST_VERSION
 #define PKG_USING_MEM_SANDBOX
 #define PKG_USING_MEM_SANDBOX_LATEST_VERSION
 
 /* system packages */
+
+/* enhanced kernel services */
+
 
 /* acceleration: Assembly language or algorithmic acceleration packages */
 
@@ -432,6 +368,14 @@
 
 /* peripheral libraries and drivers */
 
+/* sensors drivers */
+
+
+/* touch drivers */
+
+
+/* Kendryte SDK */
+
 #define PKG_USING_EASYBLINK
 #define PKG_EASYBLINK_MAX_LED_NUMS 2
 #define PKG_EASYBLINK_USING_MSH_CMD
@@ -440,7 +384,12 @@
 /* AI packages */
 
 
+/* Signal Processing and Control Algorithm Packages */
+
+
 /* miscellaneous packages */
+
+/* project laboratory */
 
 /* samples: kernel and components samples */
 
@@ -481,12 +430,14 @@
 #define BSP_USING_TIMER4
 #define BSP_USING_UART
 #define BSP_USING_UART0
+#define BSP_USING_UART0_TX_DMA
+#define BSP_USING_UART0_RX_DMA
 #define BSP_USING_UART1
+#define BSP_USING_UART1_TX_DMA
+#define BSP_USING_UART1_RX_DMA
 #define BSP_USING_UART2
 #define BSP_USING_UART6
 #define BSP_USING_UART8
-#define BSP_USING_SDH
-#define NU_SDH_HOTPLUG
 #define BSP_USING_SPI
 #define BSP_USING_SPI_PDMA
 #define BSP_USING_SPI0

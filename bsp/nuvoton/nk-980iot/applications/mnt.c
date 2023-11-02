@@ -51,6 +51,8 @@ unsigned long rwflag;
 const void   *data;
 */
 
+
+
 const struct dfs_mount_tbl mount_table[] =
 {
     { RAMDISK_UDC, "/mnt/ram_usbd", "elm", 0, RT_NULL },
@@ -156,6 +158,14 @@ int filesystem_init(void)
 {
     rt_err_t result = RT_EOK;
 
+    if(!rt_device_find("sdh1"))
+    {
+        LOG_E("cannot find sdh1 device");
+    }else
+    {
+
+    }
+
     // ramdisk as root
     if (!rt_device_find(RAMDISK_NAME))
     {
@@ -177,8 +187,15 @@ int filesystem_init(void)
             mkdir_p("/mnt", 0x777);
             mkdir_p("/cache", 0x777);
             mkdir_p("/download", 0x777);
+            mkdir_p("/upload", 0x777);
+            mkdir_p("/webnet", 0x777);
+            mkdir_p("/webnet/admin", 0x777);
+            mkdir_p("/webnet/css", 0x777);
+            mkdir_p("/webnet/js", 0x777);
+            mkdir_p("/webnet/fonts", 0x777);
             mkdir_p("/mnt/ram_usbd", 0x777);
             mkdir_p("/mnt/filesystem", 0x777);
+
 #if defined(RT_USBH_MSTORAGE) && defined(UDISK_MOUNTPOINT)
             mkdir_p(UDISK_MOUNTPOINT, 0x777);
 #endif

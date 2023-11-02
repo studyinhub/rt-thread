@@ -45,8 +45,13 @@ objs = PrepareBuilding(env, RTT_ROOT, has_libcpu=False)
 nuvoton_library = 'nuc980'
 rtconfig.BSP_LIBRARY_TYPE = nuvoton_library
 
+
+objs.extend(SConscript(os.path.join(libraries_path_prefix, 'common', 'SConscript')))
+
+
 # include libraries
 objs.extend(SConscript(os.path.join(libraries_path_prefix, nuvoton_library, 'SConscript')))
+
 
 # include nu_pkgs
 objs.extend(SConscript(os.path.join(libraries_path_prefix, 'nu_packages', 'SConscript')))

@@ -1,0 +1,8 @@
+{
+    "python.formatting.provider": "black",
+    "files.associations": {
+        "*.html": "html",
+        "string.h": "c"
+    },
+    "python.pythonPath": "/usr/local/opt/python@3.9/bin/python3.9"
+}

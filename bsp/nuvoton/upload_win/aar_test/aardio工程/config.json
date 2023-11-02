@@ -1,0 +1,107 @@
+{
+    "enableRTU": false,
+    "serial": {
+        "ASC_232": {
+            "Port": "COM5",
+            "BaudRate": 9600,
+            "ByteSize": 8,
+            "Parity": "N",
+            "Stopbits": 1,
+            "Enabled": true
+        },
+        "ASC_485": {
+            "Port": "COM6",
+            "BaudRate": 9600,
+            "ByteSize": 8,
+            "Parity": "N",
+            "Stopbits": 1,
+            "Enabled": false
+        },
+        "RTU_485": {
+            "Port": "COM8",
+            "BaudRate": 9600,
+            "ByteSize": 8,
+            "Parity": "N",
+            "Stopbits": 1,
+            "Enabled": true
+        }
+    },
+    "test_frame": [
+        {
+            "name": "读取13",
+            "frame": ":01170000000D0000000000DB\r\n",
+            "cycle": false,
+            "cycle_int": 0.4
+        },
+        {
+            "name": "读取15",
+            "frame": ":01170000000F0000000000D9\r\n",
+            "cycle": false,
+            "cycle_int": 0.8
+        },
+        {
+            "name": "读取32",
+            "frame": ":0117000000200000000000C8\r\n",
+            "cycle": true,
+            "cycle_int": 1.0
+        },
+        {
+            "name": "启动",
+            "frame": ":011700000000000C0001020001D8\r\n",
+            "cycle": false,
+            "cycle_int": 0.4
+        },
+        {
+            "name": "状态",
+            "frame": ":0117000400040000000000E0\r\n",
+            "cycle": false,
+            "cycle_int": 0.4
+        },
+        {
+            "name": "停止",
+            "frame": ":011700000000000C0001020000D9\r\n",
+            "cycle": false,
+            "cycle_int": 0.4
+        },
+        {
+            "name": "设温度",
+            "frame": ":011700000000000B00010200F0EA\r\n",
+            "cycle": false,
+            "cycle_int": 0.4
+        }
+    ],
+    "my_entry_list": [
+        {
+            "label": "从机地址",
+            "value": 1
+        },
+        {
+            "label": "功能码",
+            "value": 23
+        },
+        {
+            "label": "读起始地址",
+            "value": 0
+        },
+        {
+            "label": "读寄存器数",
+            "value": 13
+        },
+        {
+            "label": "写起始地址",
+            "value": 0
+        },
+        {
+            "label": "写寄存器数",
+            "value": 0
+        },
+        {
+            "label": "写字节数",
+            "value": 0
+        },
+        {
+            "label": "数据",
+            "value": ""
+        }
+    ]
+}

@@ -26,6 +26,13 @@
 
 #include "board.h"
 
+// #ifdef EMAC_PHY_ADDR
+// #undef EMAC_PHY_ADDR
+// #define EMAC_PHY_ADDR      0UL 
+// #endif
+
+
+
 static void nu_pin_uart_init(void)
 {
 
@@ -138,7 +145,7 @@ void nu_pin_init(void)
     nu_pin_usbd_init();
 #endif
 
-    nu_pin_usbh_init();
+    // nu_pin_usbh_init();
 }
 
 void nu_pin_deinit(void)

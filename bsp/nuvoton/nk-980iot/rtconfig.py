@@ -1,4 +1,5 @@
 import os
+import platform
 # toolchains options
 ARCH     = 'arm'
 CPU      = 'arm926'
@@ -9,11 +10,13 @@ CROSS_TOOL 	= 'gcc'
 if os.getenv('RTT_CC'):
 	CROSS_TOOL = os.getenv('RTT_CC')
 
+print(platform.system())
 if  CROSS_TOOL == 'gcc':
-	PLATFORM = 'gcc'
-	# EXEC_PATH = r'/applications/ARM/bin'
-	# EXEC_PATH = r'C:\Program Files (x86)\GNU Tools ARM Embedded\6 2017-q1-update\bin'
-	EXEC_PATH = r'/Users/yangxiyuan/Projects/rtt-projects/toolchains/gcc-arm-none-eabi-5_4-2016q3/bin/'
+    PLATFORM = 'gcc'
+    if platform.system() == 'Windows':
+        EXEC_PATH = r'C:/RTOS/env/env/tools/gnu_gcc/arm_gcc/mingw/bin'
+    else:
+        EXEC_PATH = r'/Users/yangxiyuan/Projects/rtt-projects/toolchains/gcc-arm-none-eabi-5_4-2016q3/bin/'
 elif CROSS_TOOL == 'keil':
 	PLATFORM 	= 'armcc'
 	EXEC_PATH 	= r'C:\Keil_v5'
@@ -55,7 +58,7 @@ if PLATFORM == 'gcc':
     LPATH = ''
 
     if BUILD == 'debug':
-        CFLAGS += ' -O2 -gdwarf-2'
+        CFLAGS += ' -O0 -gdwarf-2'
         AFLAGS += ' -gdwarf-2'
     else:
         CFLAGS += ' -O2'

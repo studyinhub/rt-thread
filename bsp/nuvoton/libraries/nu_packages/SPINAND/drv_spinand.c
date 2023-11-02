@@ -253,8 +253,8 @@ static rt_err_t spinand_write_page(struct rt_mtd_nand_device *device,
         return -RT_MTD_EIO;
     }
 
-    spinand_dump_buffer(page, (uint8_t *)data, data_len, "WRITE DATA");
-    spinand_dump_buffer(page, (uint8_t *)spare, spare_len, "WRITE SPARE");
+    // spinand_dump_buffer(page, (uint8_t *)data, data_len, "WRITE DATA");
+    // spinand_dump_buffer(page, (uint8_t *)spare, spare_len, "WRITE SPARE");
 
     result = rt_mutex_take(SPINAND_FLASH_LOCK, RT_WAITING_FOREVER);
     RT_ASSERT(result == RT_EOK);

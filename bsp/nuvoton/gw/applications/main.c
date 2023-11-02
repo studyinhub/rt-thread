@@ -14,8 +14,7 @@
 #include <rtdevice.h>
 #include "drv_sys.h"
 #include <drv_gpio.h>
-
-#include "auto_version.h"
+#include <fal.h>
 
 #include <netdev_ipaddr.h>
 #include <netdev.h>
@@ -23,11 +22,15 @@
 #include "dfs_file.h"
 #include "cJSON.h"
 #include "main.h"
-#include "myWdg.h"
+#include "myWdt.h"
 
-#include "config.h"
+#include "myConfig.h"
 #include "modbus_x.h"
 #include "myThreads.h"
+
+#include "myWebnet.h"
+
+// #include "easyflash.h"
 
 
 #ifdef LOG_TAG
@@ -38,17 +41,7 @@
 #define LOG_LVL LOG_LVL_DBG
 #include <ulog.h>
 
-static void idle_hook(void)
-{
-    /* 在空闲线程的回调函数里喂狗 */
 
-    if (wdg_dev != RT_NULL)
-    {
-        
-        rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_KEEPALIVE, NULL);
-        
-    }
-}
 
 static int set_date_time()
 {
@@ -100,9 +93,7 @@ void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type)
     {
     case NETDEV_CB_STATUS_LINK_UP:
         LOG_I("Ethernet LINK UP");
-        // 
         init_tftps(WEB_ROOT);
-        //
         init_webnet(WEB_ROOT);
         break;
     case NETDEV_CB_STATUS_LINK_DOWN:
@@ -113,21 +104,21 @@ void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type)
     }
 }
 
+
 int main(int argc, char **argv)
 {
     rt_err_t ret;
     // LOG_I("The current version of APP firmware is %s\n", versionString);
     sprintf(buildtime,"%s",BUILDTIME);
+    // fal_init();
     printVersion();
     set_date_time();
+    enable_wdt();
     load_config();
-
+    log_d("web_root:%s",WEB_ROOT);
     threads_init();
     init_ser_ports();
-
-    enable_wdt();
-
-    rt_thread_idle_sethook(idle_hook);
+    init_rtu_master();
 
     rt_thread_t tid_m_poll = RT_NULL, tid2 = RT_NULL, tid_s_poll = RT_NULL;
 
