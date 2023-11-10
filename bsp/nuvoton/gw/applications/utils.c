@@ -4,8 +4,8 @@
 #define LOG_LVL LOG_LVL_ERROR
 #include <ulog.h>
 
-//ASCII 字符串 转8位16进制数 '12'转为0x12
-char ATOHChar(char *var) 
+// ASCII 字符串 转8位16进制数 '12'转为0x12
+char ATOHChar(char *var)
 {
     char var1 = *var;
     char var2 = *(var + 1);
@@ -33,7 +33,7 @@ char ATOHChar(char *var)
     return temp;
 }
 
- //ASCII 字符串 转16位16进制数 '12AB'转为0x12AB
+// ASCII 字符串 转16位16进制数 '12AB'转为0x12AB
 int ATOHInt(char *var)
 {
     char var1 = *var;
@@ -65,44 +65,54 @@ int ATOHInt(char *var)
     return temp;
 }
 
-void endian_convert_int16(int16_t *buf, size_t size) {
+void endian_convert_int16(int16_t *buf, size_t size)
+{
 
-  for(size_t i = 0; i < size; i++) {
-    int16_t value = buf[i];
-    uint8_t *byte1 = (uint8_t*)&value; 
-    uint8_t *byte2 = (uint8_t*)&value + 1;
-    
-    uint8_t temp = *byte1;
-    *byte1 = *byte2; 
-    *byte2 = temp;
+    for (size_t i = 0; i < size; i++)
+    {
+        int16_t value = buf[i];
+        uint8_t *byte1 = (uint8_t *)&value;
+        uint8_t *byte2 = (uint8_t *)&value + 1;
 
-    buf[i] = value;
-  }
+        uint8_t temp = *byte1;
+        *byte1 = *byte2;
+        *byte2 = temp;
 
+        buf[i] = value;
+    }
 }
 
-//12=>31,32
-// 如果 endian false ,就不进行 16 进制字节顺序转换,否则需要
+// 12=>31,32
+//  如果 endian false ,就不进行 16 进制字节顺序转换,否则需要
 
-int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len,uint8_t endian) 
+int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
 {
     char temp = 0;
     char nibble[2]; // nibble 半字节的意思
     int i = 0, j = 0;
 
-    if(endian)
+    uint8_t *tempBuf = rt_malloc(sizeof(uint8_t) * len);
+
+    rt_memcpy(tempBuf, pSrcHex, len);
+    // for (i = 0; i < len; i++)
+    // {
+    //     rt_kprintf("tempBuf[%d]=%d\r\n", i, tempBuf[i]);
+    // }
+
+    if (endian)
     {
-        endian_convert_int16((int16_t *)pSrcHex,len/2);
+
+        endian_convert_int16((int16_t *)tempBuf, len / 2);
     }
-    
-    char *buffer = rt_malloc(2*len);
+
+    char *buffer = rt_malloc(2 * len);
 
     for (i = 0; i < len; i++)
     {
-        // log_d("i:%d pSrcHex[i]:%02x", i, pSrcHex[i]);
+        // log_d("i:%d tempBuf[i]:%02x", i, pSrcHex[i]);
 
-        nibble[0] = pSrcHex[i] >> 4 & 0x0F;
-        nibble[1] = pSrcHex[i] & 0x0F;
+        nibble[0] = tempBuf[i] >> 4 & 0x0F;
+        nibble[1] = tempBuf[i] & 0x0F;
         for (j = 0; j < 2; j++)
         {
             if (nibble[j] < 10)
@@ -123,8 +133,12 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len,uint8_t endian)
 
     buffer[2 * len] = 0x00;
     rt_memcpy(pDstAsc, buffer, 2 * len);
-    rt_free(buffer);
+
     pDstAsc[2 * len] = 0x00;
+
+    rt_free(buffer);
+    rt_free(tempBuf);
+
     return 1;
 }
 
@@ -162,8 +176,8 @@ int ASCII_LRC(uint8_t *buf, uint16_t len)
     // }
     // rt_kprintf("\n");
 
-    log_hex("ascc lrc",16,buf,len);
-    
+    log_hex("ascc lrc", 16, buf, len);
+
     if (len % 2 != 0)
     {
         LOG_W("len is not mod by 2,please check");
@@ -192,4 +206,3 @@ int ASCII_LRC(uint8_t *buf, uint16_t len)
 
     return result;
 }
-

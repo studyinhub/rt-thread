@@ -21,7 +21,7 @@
         var div1 = true
         var div2 = true
         var div3 = true
-        
+
         $(document).ready(function () {
 
             $("#div11").hide()
@@ -112,7 +112,7 @@
         })
 
         function resfresh() {
-
+            console.log('resfresh')
             load_config("api").then(function () {
                 port0 = config.ports[0]
                 port1 = config.ports[1]
@@ -125,6 +125,13 @@
         function reboot() {
             api_reset().then((res) => {
                 console.log('switch_root:', res)
+            })
+        }
+
+        function clearWeb() {
+            console.log('api_clear')
+            api_clear().then((res) => {
+                console.log('clear all web files')
             })
         }
 
@@ -153,14 +160,14 @@
 
             var slaves = config.slaves
             $("#J_TbData").empty()
-            for( var i = 0; i < slaves.length; i++ ) {
+            for (var i = 0; i < slaves.length; i++) {
                 //动态创建一个tr行标签,并且转换成jQuery对象
                 var $trTemp = $("<tr></tr>");
                 //往行里面追加 td单元格
-                $trTemp.append("<td>"+ slaves[i].id +"</td>");
-                $trTemp.append("<td>"+ slaves[i].cmd +"</td>");
-                $trTemp.append("<td>"+ slaves[i].start +"</td>");
-                $trTemp.append("<td>"+ slaves[i].cnt +"</td>");
+                $trTemp.append("<td>" + slaves[i].id + "</td>");
+                $trTemp.append("<td>" + slaves[i].cmd + "</td>");
+                $trTemp.append("<td>" + slaves[i].start + "</td>");
+                $trTemp.append("<td>" + slaves[i].cnt + "</td>");
                 $("#J_TbData").append($trTemp);
                 // $trTemp.appendTo("#J_TbData");
             }
@@ -202,13 +209,14 @@
 <body>
 
     <!--#include virtual="/top.html" -->
-    <h1>Configurations</h1>
+    <h1>参数配置</h1>
 
     <div>
+        <button onclick="clearWeb()">清空 webnet</button>
         <button onclick="reboot()">重启网关</button>
         <button onclick="resfresh()">刷新</button>
         <button onclick="switch_root()">切换 webroot</button>
-        <button onclick="test()" >测试切换 radio</button>
+        <button onclick="test()">测试切换 radio</button>
     </div>
 
     <div style="display: flex;align-items:center;">

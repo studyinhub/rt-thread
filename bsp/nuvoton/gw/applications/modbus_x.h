@@ -24,14 +24,14 @@ struct SER_MSG
     struct SER_PORT *port; /*来自端口，或者说这条消息要返回给那个 ascii 端口*/
 };
 
-extern struct CONFIG g_stConfig;
-
-extern uint8_t parse_ascii_frame(char *ptrFrame, rt_uint32_t frame_len);
+extern uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len);
 
 extern uint8_t parse_rtu_frame(char *ptrFrame, rt_uint16_t frame_len);
 
+extern void rtu_master_init(void);
+extern int rtu_read_holdings(int regStartAddr, int regCnt, uint16_t *holdBuf);
+
 extern int init_ser_ports();
-extern int init_rtu_master();
-extern int rs485_send(rt_device_t dev,uint8_t *buf, int len);
-extern int rs485_receive(uint8_t *buf, int bufsz, int timeout, int bytes_timeout);
+extern int rs485_send(rt_device_t dev, uint8_t *buf, int len);
+extern int rs485_receive(uint8_t *buf, int bufsz, int timeout);
 #endif

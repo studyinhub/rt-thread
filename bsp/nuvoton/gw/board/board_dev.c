@@ -1,18 +1,17 @@
 /**************************************************************************/ /**
-*
-* @copyright (C) 2021 yangxiyuan. All rights reserved.
-*
-* Change Logs:
-* Date            Author            Notes
-* 2021-11-25      yangxiyuan        First version
-*
-******************************************************************************/
+                                                                              *
+                                                                              * @copyright (C) 2021 yangxiyuan. All rights reserved.
+                                                                              *
+                                                                              * Change Logs:
+                                                                              * Date            Author            Notes
+                                                                              * 2021-11-25      yangxiyuan        First version
+                                                                              *
+                                                                              ******************************************************************************/
 #include <string.h>
 #include <rtconfig.h>
 #include <rtdevice.h>
 #include <drv_uart.h>
 #include "easyblink.h"
-
 
 #define LOG_TAG "board"
 #define LOG_LVL LOG_LVL_DBG
@@ -35,6 +34,8 @@
 // nand0 3MB 基本上存储的都是系统的 spl uboot app env，这些，所以 nand0 不要存入用户数据，这部分占用的是 3MB 之前的数据，给 app 留了 1MB 的空间
 // nand1 的空间是 128-3 = 125MB， 起始地址是 0x300000 ,如果在这个位置烧写用户数据会怎么样，那么用到的文件系统是 uffs，如何生成 uffs 的 image 呢？
 // nand2 是整个分区，128MB，
+
+// nand1
 struct rt_mtd_nand_device mtd_partitions[MTD_SPINAND_PARTITION_NUM] = {
     [0] =
         {
@@ -45,14 +46,14 @@ struct rt_mtd_nand_device mtd_partitions[MTD_SPINAND_PARTITION_NUM] = {
     [1] =
         {
             .block_start = 26,
-            .block_end = 1023,
-            .block_total = 998,
+            .block_end = 225,
+            .block_total = 200,
         },
     [2] =
         {
-            .block_start = 0,
+            .block_start = 226,
             .block_end = 1023,
-            .block_total = 1024,
+            .block_total = 798,
         }};
 
 static int rt_hw_spinand_init(void)
@@ -67,13 +68,7 @@ static int rt_hw_spinand_init(void)
 }
 
 INIT_COMPONENT_EXPORT(rt_hw_spinand_init);
-#endif //defined(BOARD_USING_STORAGE_SPINAND) && defined(NU_PKG_USING_SPINAND)
-
-
-
-
-
-
+#endif // defined(BOARD_USING_STORAGE_SPINAND) && defined(NU_PKG_USING_SPINAND)
 
 #if defined(BOARD_USING_UART1_RS232)
 #define NU_UART1_DEVNAME "uart1"
@@ -124,8 +119,8 @@ static char uart_get_char(rt_device_t serial_device, rt_sem_t rx_sem)
 {
     char ch;
 
-    /* 从串口读取一个字节的数据，没有读取到则等待接收信号量 
-        第二个参数也可以是 -1 
+    /* 从串口读取一个字节的数据，没有读取到则等待接收信号量
+        第二个参数也可以是 -1
         如果没有读取到，则返回 0
         否则返回 1
     */
@@ -186,7 +181,7 @@ static char uart_get_char(rt_device_t serial_device, rt_sem_t rx_sem)
 //     }
 // }
 
-#endif //#defined(BOARD_USING_UART1_RS232)
+#endif // #defined(BOARD_USING_UART1_RS232)
 
 #if defined(BOARD_USING_UART6_RS485)
 #define NU_UART6_DEVNAME "uart6"
@@ -207,11 +202,11 @@ int test_uart6(int argc, char **argv)
 
     rt_kprintf("Find %s.\n", NU_UART6_DEVNAME);
 
-    config.baud_rate = BAUD_RATE_9600; //修改波特率为 115200
-    config.data_bits = DATA_BITS_8;    //数据位 8
-    config.stop_bits = STOP_BITS_1;    //停止位 1
-    config.bufsz = 128;                //修改缓冲区 buff size 为 128
-    config.parity = PARITY_NONE;       //无奇偶校验位
+    config.baud_rate = BAUD_RATE_9600; // 修改波特率为 115200
+    config.data_bits = DATA_BITS_8;    // 数据位 8
+    config.stop_bits = STOP_BITS_1;    // 停止位 1
+    config.bufsz = 128;                // 修改缓冲区 buff size 为 128
+    config.parity = PARITY_NONE;       // 无奇偶校验位
 
     rt_device_control(serial, RT_DEVICE_CTRL_CONFIG, &config);
 
@@ -241,7 +236,7 @@ exit_test_rs485:
     return 0;
 }
 MSH_CMD_EXPORT(test_uart6, test rs485A communication);
-#endif //defined(BOARD_USING_UART6_RS485)
+#endif // defined(BOARD_USING_UART6_RS485)
 
 #if defined(BOARD_USING_UART8_RS485)
 
@@ -264,11 +259,11 @@ int test_uart8(int argc, char **argv)
 
     struct serial_configure config = RT_SERIAL_CONFIG_DEFAULT; /* 初始化配置参数 */
 
-    config.baud_rate = BAUD_RATE_115200; //修改波特率为 115200
-    config.data_bits = DATA_BITS_8;      //数据位 8
-    config.stop_bits = STOP_BITS_1;      //停止位 1
-    config.bufsz = 128;                  //修改缓冲区 buff size 为 128
-    config.parity = PARITY_NONE;         //无奇偶校验位
+    config.baud_rate = BAUD_RATE_115200; // 修改波特率为 115200
+    config.data_bits = DATA_BITS_8;      // 数据位 8
+    config.stop_bits = STOP_BITS_1;      // 停止位 1
+    config.bufsz = 128;                  // 修改缓冲区 buff size 为 128
+    config.parity = PARITY_NONE;         // 无奇偶校验位
 
     rt_device_control(serial, RT_DEVICE_CTRL_CONFIG, &config);
 
@@ -298,7 +293,7 @@ exit_test_rs485:
     return 0;
 }
 MSH_CMD_EXPORT(test_uart8, test rs485 B communication);
-#endif //defined(BOARD_USING_UART8_RS485)
+#endif // defined(BOARD_USING_UART8_RS485)
 
 static uint32_t u32Key1 = KEY_1;
 
@@ -318,7 +313,6 @@ void nu_button_cb(void *args)
         //     break;
     }
 }
-
 
 ebled_t led_run = RT_NULL;
 ebled_t led_wrk = RT_NULL;
@@ -362,10 +356,8 @@ int board_init(void)
     rt_pin_write(LED_RUN, PIN_LOW); // 低电平亮
     rt_pin_write(LED_WRK, PIN_LOW); // 低电平亮
 
-    led_run = easyblink_init_led(LED_RUN, PIN_LOW);// 低电平有效，并关闭 LED
-    led_wrk = easyblink_init_led(LED_WRK, PIN_LOW);// 低电平有效，并关闭 LED
-
-   
+    led_run = easyblink_init_led(LED_RUN, PIN_LOW); // 低电平有效，并关闭 LED
+    led_wrk = easyblink_init_led(LED_WRK, PIN_LOW); // 低电平有效，并关闭 LED
 
     // easyblink(led_run, -1, 250, 500);
     // easyblink(led_2, -1, 100, 200);

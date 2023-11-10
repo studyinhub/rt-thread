@@ -20,16 +20,16 @@ void print_time()
     log_d("g_FmtTimeStr:%s", g_FmtTimeStr);
 }
 
-void printJSON(cJSON *root) //以递归的方式打印json的最内层键值对
+void printJSON(cJSON *root) // 以递归的方式打印json的最内层键值对
 {
     log_d("打印：\n%s\n", cJSON_Print(root));
 
-    for (int i = 0; i < cJSON_GetArraySize(root); i++) //遍历最外层json键值对
+    for (int i = 0; i < cJSON_GetArraySize(root); i++) // 遍历最外层json键值对
     {
         cJSON *item = cJSON_GetArrayItem(root, i);
-        if (cJSON_Object == item->type) //如果对应键的值仍为cJSON_Object就递归调用printJson
+        if (cJSON_Object == item->type) // 如果对应键的值仍为cJSON_Object就递归调用printJson
             printJSON(item);
-        else //值不为json对象就直接打印出键和值
+        else // 值不为json对象就直接打印出键和值
         {
             printf("%s->", item->string);
             printf("%s\n", cJSON_Print(item));
@@ -41,38 +41,80 @@ cJSON *g_root = NULL;
 
 // 具体参考 webnet/config.json
 
-int baud_arr[7]= {2400,4800,9600,19200,38400,57600,115200};
+int baud_arr[7] = {2400, 4800, 9600, 19200, 38400, 57600, 115200};
+
+struct CONFIG g_stConfig = {
+    .mapEnable = 1,
+    .rtuSys = {
+        .scanEnable = 1,
+        .scanInv = 1000,
+        .rtuAddr = 1,
+        .scanStAddr = 0,
+        .scanRegCnt = 100,
+    },
+    .serPort = {
+        {"uart8", 0, 5, "rtu", RT_SERIAL_CONFIG_DEFAULT},   // RTU-RS485 master
+        {"uart1", 1, 5, "ascii", RT_SERIAL_CONFIG_DEFAULT}, // ASCII-RS232 slave
+        {"uart6", 1, 5, "ascii", RT_SERIAL_CONFIG_DEFAULT}, // ASCII-RS485 slave
+    },
+    // 实际上只有一个 PLC,但是在软件上分成了 3 端
+    .ascSys = {
+        {
+            .name = "sys1", .enable = 1,
+            .slaveAddr = 1, // 需要根据 0090 地址来决定 ASCII 端通信地址,默认为 1
+            .regAddr = 0,
+            .cnt = 100,
+            .offset = 0 // 响应偏移
+        },
+        {.name = "sys2", .enable = 0, .slaveAddr = 2, .regAddr = 0, .cnt = 20, .offset = 40},
+        {.name = "sys3", .enable = 0, .slaveAddr = 3, .regAddr = 0, .cnt = 40, .offset = 60},
+    }};
 
 void build_config_factory_json()
 {
-    g_root = cJSON_CreateObject(); //创建一个json对象
+    int i = 0;
+    g_root = cJSON_CreateObject(); // 创建一个json对象
 
     cJSON_AddItemToObject(g_root, "lastConfigAt", cJSON_CreateString(BUILDTIME));
-    cJSON_AddItemToObject(g_root, "masterID", cJSON_CreateNumber(1));
+    cJSON_AddItemToObject(g_root, "mapEnable", cJSON_CreateNumber(g_stConfig.mapEnable));
 
+    cJSON *rtu_obj = cJSON_CreateObject();
+    cJSON_AddItemToObject(rtu_obj, "scanEnable", cJSON_CreateNumber(g_stConfig.rtuSys.scanEnable));
+    cJSON_AddItemToObject(rtu_obj, "rtuAddr", cJSON_CreateNumber(g_stConfig.rtuSys.rtuAddr));
+    cJSON_AddItemToObject(rtu_obj, "scanStAddr", cJSON_CreateNumber(g_stConfig.rtuSys.scanStAddr));
+    cJSON_AddItemToObject(rtu_obj, "scanRegCnt", cJSON_CreateNumber(g_stConfig.rtuSys.scanRegCnt));
+    cJSON_AddItemToObject(g_root, "rtuSys", rtu_obj);
+
+    // cJSON *asc_obj = cJSON_CreateObject();
+    // cJSON_AddItemToObject(asc_obj, "scanEnable", cJSON_CreateNumber(g_stConfig.rtuSys.scanEnable));
+    // cJSON_AddItemToObject(asc_obj, "rtuAddr", cJSON_CreateNumber(g_stConfig.rtuSys.rtuAddr));
+    // cJSON_AddItemToObject(asc_obj, "scanStAddr", cJSON_CreateNumber(g_stConfig.rtuSys.scanStAddr));
+    // cJSON_AddItemToObject(asc_obj, "scanRegCnt", cJSON_CreateNumber(g_stConfig.rtuSys.scanRegCnt));
+    // cJSON_AddItemToObject(g_root, "ascSys", asc_obj);
 
     cJSON *Array_baud;
     Array_baud = cJSON_CreateArray();
 
-    for(int i = 0; i<7;i++)
+    // 构建 波特率数组
+    for (i = 0; i < 7; i++)
     {
-     cJSON_AddItemToArray(Array_baud, cJSON_CreateNumber(baud_arr[i]));
+        cJSON_AddItemToArray(Array_baud, cJSON_CreateNumber(baud_arr[i]));
     }
 
     cJSON_AddItemToObject(g_root, "baudrates", Array_baud);
 
-    cJSON *scan_obj = cJSON_CreateObject();
-    cJSON_AddBoolToObject(scan_obj,"test",1); // RT_TRUE 是 0 ？
-    cJSON_AddItemToObject(scan_obj,"test1",cJSON_CreateBool(1)); // RT_TRUE 是 0 ？
+    // 构建 scan
 
-    cJSON_AddItemToObject(scan_obj,"scanEnable",cJSON_CreateNumber(1)); // RT_TRUE 是 0 ？
-    cJSON_AddItemToObject(scan_obj,"scanInv",cJSON_CreateNumber(500)); // 扫描间隔 
-    cJSON_AddItemToObject(scan_obj,"scanStAddr",cJSON_CreateNumber(0)); 
-    cJSON_AddItemToObject(scan_obj,"scanRegCnt",cJSON_CreateNumber(100)); 
-    cJSON_AddItemToObject(g_root, "scan", scan_obj);
+    // cJSON *scan_obj = cJSON_CreateObject();
+    // cJSON_AddBoolToObject(scan_obj, "test", 1);                           // RT_TRUE 是 0 ？
+    // cJSON_AddItemToObject(scan_obj, "test1", cJSON_CreateBool(1));        // RT_TRUE 是 0 ？
+    // cJSON_AddItemToObject(scan_obj, "scanEnable", cJSON_CreateNumber(1)); // RT_TRUE 是 0 ？
+    // cJSON_AddItemToObject(scan_obj, "scanInv", cJSON_CreateNumber(500));  // 扫描间隔
+    // cJSON_AddItemToObject(scan_obj, "scanStAddr", cJSON_CreateNumber(0));
+    // cJSON_AddItemToObject(scan_obj, "scanRegCnt", cJSON_CreateNumber(100));
+    // cJSON_AddItemToObject(g_root, "scan", scan_obj);
 
     // cJSON *Array_querys = cJSON_CreateArray();
-
     // cJSON *Query_obj = cJSON_CreateObject();
     // cJSON_AddNumberToObject(Query_obj, "id", 1);
     // cJSON_AddNumberToObject(Query_obj, "cmd", 3);
@@ -103,7 +145,7 @@ void build_config_factory_json()
 
     port_obj = cJSON_CreateObject();
     cJSON_AddStringToObject(port_obj, "name", "uart1");
-    cJSON_AddNumberToObject(port_obj, "baudrate", 9600); // 9600 7-E-1 
+    cJSON_AddNumberToObject(port_obj, "baudrate", 9600); // 9600 7-E-1
     cJSON_AddNumberToObject(port_obj, "databits", 7);
     cJSON_AddNumberToObject(port_obj, "parity", 2);
     cJSON_AddNumberToObject(port_obj, "stopbits", 1);
@@ -112,17 +154,16 @@ void build_config_factory_json()
 
     port_obj = cJSON_CreateObject();
     cJSON_AddStringToObject(port_obj, "name", "uart6");
-    cJSON_AddNumberToObject(port_obj, "baudrate", 9600); // 9600 7-E-1 
+    cJSON_AddNumberToObject(port_obj, "baudrate", 9600); // 9600 7-E-1
     cJSON_AddNumberToObject(port_obj, "databits", 7);
     cJSON_AddNumberToObject(port_obj, "parity", 2);
     cJSON_AddNumberToObject(port_obj, "stopbits", 1);
     cJSON_AddNumberToObject(port_obj, "bufsz", 1024);
     cJSON_AddItemToArray(Array_ports, port_obj);
 
-    cJSON_AddItemToObject(g_root, "ports", Array_ports);
+    cJSON_AddItemToObject(g_root, "serPorts", Array_ports);
 
     LOG_D("构建的JSON:\n%s\n", cJSON_Print(g_root));
-    // cJSON_Delete(root);
 }
 
 int load_config()
@@ -134,7 +175,7 @@ int load_config()
     int iConfigJsonSize = 0;
     int fd = 0;
 
-    int config_from =0; // 1:flash 0:ram
+    int config_from = 0; // 1:flash 0:ram
     cJSON *item = NULL;
 
     // 给 WEB_ROOT 赋一个初值
@@ -144,23 +185,24 @@ int load_config()
     // 如果有就以存储中的文件配置做为配置
     // 否则就用自动构建的配置，并保存到存储中
 
-    #ifndef WEBNET_INRAM
-        rt_sprintf(WEB_ROOT,"%s","/mnt/filesystem/webnet");
-    #else
-        rt_sprintf(WEB_ROOT,"%s","/webnet"); 
-    #endif
+#ifndef WEBNET_INRAM
+    rt_sprintf(WEB_ROOT, "%s", "/mnt/filesystem/webnet");
+#else
+    rt_sprintf(WEB_ROOT, "%s", "/webnet");
+#endif
 
     rt_sprintf(path, "%s/config.json", WEB_ROOT);
-    log_d("read config.json from %s",path);
-    fd = open(path, O_RDONLY); 
-    if(fd<=0)
+    log_d("read config.json from %s", path);
+    fd = open(path, O_RDONLY);
+    if (fd <= 0 || 1)
     {
-        log_w("在 FLASH 中没有找到配置文件,将采用默认配置文件"); 
+        log_w("在 FLASH 中没有找到配置文件,将采用默认配置文件");
         build_config_factory_json();
         // 保存配置文件，下次重启的时候将从文件中加载
         save_config(path, g_root);
         config_from = 1;
-    }else
+    }
+    else
     {
         // 如果存储中已经有了 config.json,那么就读取
         iConfigJsonSize = read(fd, g_BUF_CONFIG_JSON, MAX_CONFIG_JSON_SIZE);
@@ -168,12 +210,11 @@ int load_config()
         // 如果配置文件有问题
         if (iConfigJsonSize > MAX_CONFIG_JSON_SIZE || iConfigJsonSize < 0)
         {
-            log_e("Config file is too large %d > %d",iConfigJsonSize,MAX_CONFIG_JSON_SIZE);
+            log_e("Config file is too large %d > %d", iConfigJsonSize, MAX_CONFIG_JSON_SIZE);
             build_config_factory_json();
         }
         log_d("Read config.json success.(%d)", iConfigJsonSize);
         g_root = cJSON_Parse(g_BUF_CONFIG_JSON);
-
     }
 
     if (!g_root)
@@ -182,7 +223,6 @@ int load_config()
         build_config_factory_json();
     }
     log_d("formated config.json print:%s", cJSON_Print(g_root));
-
 
     // 首先判断 ram 中是否已有配置文件，如果有就以 RAM 中的为准，如果没有就从 flash 中拷贝
     // rt_sprintf(path, "%s", "/webnet/config.json");
@@ -205,8 +245,6 @@ int load_config()
     //     }
     //     config_from = 1;
     // }
-
-
 
     // log_d("unformated config.json print:%s", cJSON_PrintUnformatted(g_root));
     // printJSON(g_root);
@@ -238,22 +276,23 @@ int save_config(char *path, cJSON *root)
     // printJSON(root);
     char jsonString[1024];
     sprintf(jsonString, "%s", cJSON_Print(root));
-    log_d("准备保存 %s 到:%s", jsonString,path);
+    log_d("准备保存 %s 到:%s", jsonString, path);
 
     DIR *pDir = opendir(WEB_ROOT);
     if (pDir == RT_NULL)
     {
-        log_e("open dir WEB_ROOT %s faild",WEB_ROOT);
-    }else
+        log_e("open dir WEB_ROOT %s faild", WEB_ROOT);
+    }
+    else
     {
-        log_i("open dir WEB_ROOT %s success",WEB_ROOT);
+        log_i("open dir WEB_ROOT %s success", WEB_ROOT);
     }
 
-    int fd = open(path, O_WRONLY|O_CREAT);
+    int fd = open(path, O_WRONLY | O_CREAT);
     int iConfigJsonSize = 0;
     if (fd < 0)
     {
-        log_e("Open %s failed",path);
+        log_e("Open %s failed", path);
         return -1;
     }
     iConfigJsonSize = write(fd, jsonString, rt_strlen(jsonString));
@@ -273,6 +312,7 @@ int save_config(char *path, cJSON *root)
         log_d("Write config.json success.(%d)", iConfigJsonSize);
         // rt_kprintf("%s\n", g_BUF_CONFIG_JSON);
     }
+    closedir(pDir);
 }
 
 struct tftp_server *tftp_server;
@@ -320,8 +360,6 @@ int switch_root(char *path)
         log_e("没有找到 tftps 线程"); // rt_thread_find 没有找到会返回 0
     }
 }
-
-
 
 int config_load(int argc, char **argv)
 {

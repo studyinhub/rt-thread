@@ -1,14 +1,14 @@
 /**************************************************************************/ /**
-*
-* @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
-*
-* SPDX-License-Identifier: Apache-2.0
-*
-* Change Logs:
-* Date            Author       Notes
-* 2020-12-12      Wayne        First version
-*
-******************************************************************************/
+                                                                              *
+                                                                              * @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
+                                                                              *
+                                                                              * SPDX-License-Identifier: Apache-2.0
+                                                                              *
+                                                                              * Change Logs:
+                                                                              * Date            Author       Notes
+                                                                              * 2020-12-12      Wayne        First version
+                                                                              *
+                                                                              ******************************************************************************/
 #include <string.h>
 #include <rtconfig.h>
 #include <rtdevice.h>
@@ -32,7 +32,6 @@
 
 // #include "easyflash.h"
 
-
 #ifdef LOG_TAG
 #undef LOG_TAG
 #endif
@@ -40,8 +39,6 @@
 #define LOG_TAG "main"
 #define LOG_LVL LOG_LVL_DBG
 #include <ulog.h>
-
-
 
 static int set_date_time()
 {
@@ -80,7 +77,6 @@ static int set_date_time()
     set_time(hour, min, sec);
     set_date(year, month, day);
     print_time();
-
 }
 
 #include <netdev.h> /* 包含全部的 netdev 相关操作接口函数 */
@@ -104,21 +100,20 @@ void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type)
     }
 }
 
-
 int main(int argc, char **argv)
 {
     rt_err_t ret;
     // LOG_I("The current version of APP firmware is %s\n", versionString);
-    sprintf(buildtime,"%s",BUILDTIME);
+    sprintf(buildtime, "%s", BUILDTIME);
     // fal_init();
     printVersion();
     set_date_time();
     enable_wdt();
     load_config();
-    log_d("web_root:%s",WEB_ROOT);
-    threads_init();
     init_ser_ports();
-    init_rtu_master();
+
+    log_d("web_root:%s", WEB_ROOT);
+    threads_init();
 
     rt_thread_t tid_m_poll = RT_NULL, tid2 = RT_NULL, tid_s_poll = RT_NULL;
 

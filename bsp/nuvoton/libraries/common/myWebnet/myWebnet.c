@@ -41,7 +41,6 @@ int make_root_dirs()
         rt_sprintf(path, "%s%s", WEB_ROOT, init_wb_dirs[i]);
         LOG_D("dirs:%s", path);
     }
-
 }
 
 static void tftp_server_thread(void *param)
@@ -134,7 +133,7 @@ void cgi_reset_handler(struct webnet_session *session)
 
     mimetype = mime_get_type(".json");
 
-       /* set http header */
+    /* set http header */
     session->request->result_code = 200;
     webnet_session_set_header(session, mimetype, 200, "Ok", strlen(status));
 
@@ -142,7 +141,26 @@ void cgi_reset_handler(struct webnet_session *session)
 
     extern void rt_hw_cpu_reset(void);
     rt_hw_cpu_reset();
+}
 
+void cgi_clear_handler(struct webnet_session *session)
+{
+    const char *mimetype;
+    session->request->result_code = 200;
+    static const char *status = "{\"data\":\"ok\"}";
+
+    mimetype = mime_get_type(".json");
+
+    // int ret = rmdir("/mnt/filesystem/webnet/css");
+
+    int ret = system("rm -r /mnt/filesystem/webnet/");
+    rt_kprintf("Clear webnet files:%d\r\n", ret);
+
+    /* set http header */
+    session->request->result_code = 200;
+    webnet_session_set_header(session, mimetype, 200, "Ok", strlen(status));
+
+    webnet_session_write(session, (const rt_uint8_t *)status, rt_strlen(status));
 }
 
 void cgi_hello_handler(struct webnet_session *session)
@@ -200,14 +218,12 @@ void cgi_putconfig_handler(struct webnet_session *session)
 
     request = session->request;
     log_d("query_counter:%d", request->query_counter);
-    log_d("content_type:%s",request->content_type);
+    log_d("content_type:%s", request->content_type);
     log_d("session->buffer:%s", session->buffer);
 
     cJSON *root = cJSON_Parse(session->buffer);
     cJSON *item = cJSON_GetObjectItem(root, "lastConfigAt");
-    log_d("lastConfigAt:%s",item->valuestring);
-
-
+    log_d("lastConfigAt:%s", item->valuestring);
 
     // 对session->buffer其进行 url 解码操作
 
@@ -220,7 +236,7 @@ void cgi_putconfig_handler(struct webnet_session *session)
     // cJSON_ReplaceItemInObject(g_root, "lastConfigAt", cJSON_CreateString(g_FmtTimeStr));
 
     // cJSON *pPorts;
-    
+
     // pPorts = cJSON_GetObjectItem(g_root, "ports");
     // printJSON(pPorts);
 
@@ -241,7 +257,7 @@ void cgi_putconfig_handler(struct webnet_session *session)
     //     log_i("保存到 flash");
     //     rt_sprintf(path, "%s%s", "/mnt/filesystem/webnet/", "/config.json");
     // }else
-    // {   
+    // {
     //     log_i("保存到 ram");
     //     rt_sprintf(path, "%s", "/webnet/config.json");
     // }
@@ -325,6 +341,7 @@ int init_webnet(char *root_path)
     webnet_set_root(root_path);
 
 #ifdef WEBNET_USING_CGI
+    webnet_cgi_register("clear", cgi_clear_handler);
     webnet_cgi_register("reset", cgi_reset_handler);
     webnet_cgi_register("hello", cgi_hello_handler);
     webnet_cgi_register("get_config", cgi_getconfig_handler);
@@ -346,19 +363,20 @@ int init_webnet(char *root_path)
     webnet_auth_set("/admin", "admin:snahko");
 #endif
 
-// #ifdef WEBNET_USING_UPLOAD
-//     extern const struct webnet_module_upload_entry upload_entry_upload;
-//     webnet_upload_add(&upload_entry_upload);
-// #endif
+    // #ifdef WEBNET_USING_UPLOAD
+    //     extern const struct webnet_module_upload_entry upload_entry_upload;
+    //     webnet_upload_add(&upload_entry_upload);
+    // #endif
     LOG_I("启动 webnet");
     webnet_init();
 
     DIR *pDir = opendir(WEB_ROOT);
     if (pDir == RT_NULL)
     {
-        log_e("open dir WEB_ROOT %s faild",WEB_ROOT);
-    }else
+        log_e("open dir WEB_ROOT %s faild", WEB_ROOT);
+    }
+    else
     {
-        log_i("open dir WEB_ROOT %s success",WEB_ROOT);
+        log_i("open dir WEB_ROOT %s success", WEB_ROOT);
     }
 }

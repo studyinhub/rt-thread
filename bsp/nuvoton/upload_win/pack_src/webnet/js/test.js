@@ -1,6 +1,6 @@
 
 
-function addToast(msg,timeout=1000) {
+function addToast(msg, timeout = 1000) {
     $.Toast("Notice", msg, "success", {
         stack: false,
         has_icon: true,
@@ -28,26 +28,25 @@ function addToast(msg,timeout=1000) {
 //     })
 // }
 
-async function load_config(src='api') {
+async function load_config(src = 'api') {
 
     const response_1 = await new Promise((resolve, reject) => {
-        if(src!=='api'){
+        if (src !== 'api') {
             // 从文件系统中的配置文件获取
-            console.log('从config.json获取配置',src)
+            console.log('从config.json获取配置', src)
             $.get("./config.json", function (response) {
                 console.log('async load config from config.json');
                 localStorage.setItem('config', JSON.stringify(response));
                 resolve(response);
             });
-        }else
-        {
+        } else {
             // 从 API 中获取
-            console.log('从api获取配置',src)
+            console.log('从api获取配置', src)
             $.get("cgi-bin/get_config", function (response) {
                 console.log('async load config from api get_config');
                 localStorage.setItem('config', response);
                 resolve(JSON.parse(response));
-            }); 
+            });
         }
     });
     config = response_1;
@@ -64,34 +63,45 @@ async function put_config(config) {
     })
 }
 
-async function chg_root(dir){
-    return await new Promise((resolve,reject)=>{
+async function chg_root(dir) {
+    return await new Promise((resolve, reject) => {
         console.log("切换 webroot")
-        $.post("cgi-bin/chg_root",{"path":dir},(data,status)=>{
-            console.log('chg_root res:', status,data)
-            if(status === 'success')
-            {
+        $.post("cgi-bin/chg_root", { "path": dir }, (data, status) => {
+            console.log('chg_root res:', status, data)
+            if (status === 'success') {
                 resolve(data)
-            }else{
+            } else {
                 reject(status)
             }
         })
     })
 }
 
-async function api_reset()
-{
-    return await new Promise((resolve,reject)=>{
+async function api_reset() {
+    return await new Promise((resolve, reject) => {
         console.log("重启网关")
-        $.post("cgi-bin/reset",(data,status)=>{
-            console.log('chg_root res:', status,data)
-            if(status === 'success')
-            {
+        $.post("cgi-bin/reset", (data, status) => {
+            console.log('chg_root res:', status, data)
+            if (status === 'success') {
                 resolve(data)
-            }else{
+            } else {
                 reject(status)
             }
         })
-    }) 
+    })
+}
+
+async function api_clear() {
+    return await new Promise((resolve, reject) => {
+        console.log("清空 webnet")
+        $.post("cgi-bin/clear", (data, status) => {
+            console.log('chg_root res:', status, data)
+            if (status === 'success') {
+                resolve(data)
+            } else {
+                reject(status)
+            }
+        })
+    })
 }
 

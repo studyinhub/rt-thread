@@ -25,14 +25,13 @@
         }
 
         $(document).ready(function () {
-
             var config = JSON.parse(localStorage.getItem('config'))
             console.log("config:", config)
             var port0 = config.ports[0]
             $("#port0-name").text(port0.name)
             $("#port0-baud_rate").text(port0.baud_rate)
 
-            $('#select10 option[value="{port0.baud_rate}]').attr("selected",true);
+            $('#select10 option[value="{port0.baud_rate}]').attr("selected", true);
 
             $("#port0-data_bits").text(port0.data_bits)
             $("#port0-parity").text(port0.parity)
@@ -119,7 +118,7 @@
             <h2>RS-485 Modbus RTU MASTER</h2>
         </div>
         <div>
-            <a id="edit1"> <button >修改</button></a>
+            <a id="edit1"> <button>修改</button></a>
             </button>
         </div>
     </div>
@@ -160,20 +159,20 @@
                         <option value="7">7</option>
                         <option value="8">8</option>
                         <option value="9">9</option>
-                    </select> 
+                    </select>
                 </li>
                 <li>
                     校验位:<select>
                         <option value="0">NONE</option>
                         <option value="1">ODD</option>
                         <option value="2">EVEN</option>
-                    </select> 
+                    </select>
                 </li>
                 <li>
                     停止位:<select>
                         <option value="1">1</option>
                         <option value="2">2</option>
-                    </select> 
+                    </select>
                 </li>
             </ul>
 
@@ -185,7 +184,7 @@
             <h2> RS-232 MODBUS ASCII SLAVE</h2>
         </div>
         <div>
-            <a id="edit2"> <button >修改</button></a>
+            <a id="edit2"> <button>修改</button></a>
         </div>
     </div>
 
@@ -220,20 +219,20 @@
                         <option value="7">7</option>
                         <option value="8">8</option>
                         <option value="9">9</option>
-                    </select> 
+                    </select>
                 </li>
                 <li>
                     校验位:<select>
                         <option value="0">NONE</option>
                         <option value="1">ODD</option>
                         <option value="2">EVEN</option>
-                    </select> 
+                    </select>
                 </li>
                 <li>
                     停止位:<select>
                         <option value="1">1</option>
                         <option value="2">2</option>
-                    </select> 
+                    </select>
                 </li>
             </ul>
 
@@ -245,7 +244,7 @@
             <h2>RS-485 MODBUS ASCII SLAVE</h2>
         </div>
         <div>
-            <a id="edit3"> <button >修改</button></a>
+            <a id="edit3"> <button>修改</button></a>
         </div>
     </div>
 
@@ -280,20 +279,20 @@
                         <option value="7">7</option>
                         <option value="8">8</option>
                         <option value="9">9</option>
-                    </select> 
+                    </select>
                 </li>
                 <li>
                     校验位:<select>
                         <option value="0">NONE</option>
                         <option value="1">ODD</option>
                         <option value="2">EVEN</option>
-                    </select> 
+                    </select>
                 </li>
                 <li>
                     停止位:<select>
                         <option value="1">1</option>
                         <option value="2">2</option>
-                    </select> 
+                    </select>
                 </li>
             </ul>
 

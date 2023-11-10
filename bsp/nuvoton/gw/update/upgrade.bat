@@ -7,7 +7,7 @@
 ::ZR4luwNxJguZRRnVpBBoSA==
 ::Yhs/ulQjdF25
 ::cxAkpRVqdFKZSDk=
-::cBs/ulQjdF+5
+::cBs/ulQjdFy5
 ::ZR41oxFsdFKZSDk=
 ::eBoioBt6dFKZSDk=
 ::cRo6pxp7LAbNWATEpCI=
@@ -27,7 +27,7 @@
 ::ZQ0/vhVqMQ3MEVWAtB9wSA==
 ::Zg8zqx1/OA3MEVWAtB9wSA==
 ::dhA7pRFwIByZRRnk
-::Zh4grVQjdDaDJGmW+0g1Kw9HcBaWKCaqFLoW7evv/NaVtgAJXPA6eYvn2KeeHO4G/ErwepgR0W1mjdsIDQ9dQgateh8jrGwMs3yAVw==
+::Zh4grVQjdDaDJGmW+0g1Kw9HcBaWKCaqFLoW7evv/NaVtgAJXPA6eYvn2KeeHO4G/ErwepgR0W1mjdsIDQ9dQgateh8jrGx95DTXZJbN41mvT1CMhg==
 ::YB416Ek+ZG8=
 ::
 ::
@@ -36,7 +36,7 @@
 chcp 65001 > nul
 SetLocal enableDelayedExpansion
 
-Title Upgrade PT980 Web files. V0.2
+Title Upgrade PT980 Web files. V0.2.2023.11.03
 
 rem where curl
 

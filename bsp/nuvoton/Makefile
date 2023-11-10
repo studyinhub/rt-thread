@@ -40,7 +40,7 @@ menuconfig:
 	scons --menuconfig
 
 upload:
-	../tftp.sh login.html
+	../tftp.sh config.html
 	
 update:
 	# source ~/.env/env.sh
