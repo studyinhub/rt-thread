@@ -6,9 +6,9 @@ dateSuffix :=$(shell date "+20%y%m%d%H%M%S")
 
 pack_file :=rtthread_pack_$(dateSuffix).bin
 
-NUWRITER=../NuWriter/bin/nuwriter
+# NUWRITER=../NuWriter/bin/nuwriter
 RAM_INI:=./NuWriterIni/ram.ini
 ERASE_INI=./NuWriterIni/erase.ini
 NAND_INI=./NuWriterIni/nand.ini
-GEN_PACK_INI=./NuWriterIni/gen_pack.ini
+# GEN_PACK_INI=./NuWriterIni/gen_pack.ini
 BURN_PACK_INI=./NuWriterIni/burn_pack.ini

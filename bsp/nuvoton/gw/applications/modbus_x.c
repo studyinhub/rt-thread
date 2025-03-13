@@ -12,7 +12,8 @@
 #include "board.h"
 
 #define LOG_TAG "modbusx"
-#define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
+#define LOG_LVL LOG_LVL_ERROR // LOG_LVL_DBG LOG_LVL_ERROR
+//
 #include <ulog.h>
 
 #define SCAN_READ_BYTES 205
@@ -1383,7 +1384,7 @@ int rs485_receive(uint8_t *buf, int bufsz, int timeout)
         // timeout = bytes_timeout;
     }
 
-    // ulog_hexdump("rs485_receive", 16, buf, len);
+    // ulog_hexdump("rs485_receive", 15, buf, len);
 
     return len;
 }

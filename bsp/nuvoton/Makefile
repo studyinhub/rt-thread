@@ -21,7 +21,8 @@ test1:
 
 ram: reset
 	scons -j 8 
-	${NUWRITER} ${RAM_INI}
+	# nuwriter ${RAM_INI}
+	nutool ram
 
 reset:
 	# 加上 - 表示连接超时继续
@@ -32,9 +33,6 @@ build:
 
 nand:reset erase
 	${NUWRITER} ${NAND_INI}
-
-erase:
-	${NUWRITER} ${ERASE_INI}  
 
 menuconfig:
 	scons --menuconfig
@@ -57,8 +55,9 @@ image:
 	./mkuffs -c -v --file ./images/uffs.bin --page-size 2048 --spare-size 64 --block-pages 64 --total-blocks 16 --ecc-option none --mount /,24,50 --exec script.ufs
 
 gpack:
-	-$(NUWRITER) $(GEN_PACK_INI)
-	@echo "重命名" $(dateSuffix)
+	# nuwriter $(GEN_PACK_INI)
+	-nutool gpack
+	echo "重命名" $(dateSuffix)
 	@mv -f ./rtthread_pack.bin ./$(pack_file)
 
 bpack: 

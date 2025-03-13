@@ -22,12 +22,14 @@ static void idle_hook(void)
         rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_KEEPALIVE, NULL);
     }
 }
-
+// #define ENABLE_WDT RT_TRUE
 int enable_wdt()
 {
     rt_err_t ret;
     rt_uint32_t timeout = WDT_TIMEOUT;
     wdg_dev = rt_device_find("wdt");
+    
+    // if(!ENABLE_WDT) return RT_ERROR;
 
     if (!wdg_dev)
     {
@@ -53,6 +55,7 @@ int enable_wdt()
     rt_thread_idle_sethook(idle_hook);
 }
 INIT_DEVICE_EXPORT(enable_wdt);
+
 
 
 // #define WDT_TEST

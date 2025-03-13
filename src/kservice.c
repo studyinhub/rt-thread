@@ -425,7 +425,32 @@ char *rt_strncpy(char *dst, const char *src, rt_ubase_t n)
 RTM_EXPORT(rt_strncpy);
 
 /**
- * This function will compare two strings with specified maximum length
+ * This function will copy string.
+ *
+ * @param  dst points to the address used to store the copied content.
+ *
+ * @param  src is the string to be copied.
+ *
+ * @return The address where the copied content is stored.
+ */
+char *rt_strcpy(char *dst, const char *src)
+{
+    char *dest = dst;
+
+    while (*src != '\0')
+    {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+
+    *dst = '\0';
+    return dest;
+}
+RTM_EXPORT(rt_strcpy);
+
+/**
+ * This function will compare two strings with specified maximum length.
  *
  * @param cs the string to be compared
  * @param ct the string to be compared

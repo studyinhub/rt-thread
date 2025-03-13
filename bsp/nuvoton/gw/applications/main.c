@@ -1,14 +1,14 @@
 /**************************************************************************/ /**
-                                                                              *
-                                                                              * @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
-                                                                              *
-                                                                              * SPDX-License-Identifier: Apache-2.0
-                                                                              *
-                                                                              * Change Logs:
-                                                                              * Date            Author       Notes
-                                                                              * 2020-12-12      Wayne        First version
-                                                                              *
-                                                                              ******************************************************************************/
+*
+* @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
+*
+* SPDX-License-Identifier: Apache-2.0
+*
+* Change Logs:
+* Date            Author       Notes
+* 2020-12-12      Wayne        First version
+*
+******************************************************************************/
 #include <string.h>
 #include <rtconfig.h>
 #include <rtdevice.h>
@@ -79,6 +79,8 @@ static int set_date_time()
     print_time();
 }
 
+// INIT_PREV_EXPORT(set_date_time);
+
 #include <netdev.h> /* 包含全部的 netdev 相关操作接口函数 */
 
 struct netdev *netdev_eth = RT_NULL;
@@ -91,6 +93,8 @@ void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type)
         LOG_I("Ethernet LINK UP");
         init_tftps(WEB_ROOT);
         init_webnet(WEB_ROOT);
+        system("dns e0 0 8.8.8.8");
+        system("dns e0 1 114.114.114.114");
         break;
     case NETDEV_CB_STATUS_LINK_DOWN:
         LOG_W("Ethernet LINK DOWN");
