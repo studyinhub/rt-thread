@@ -9,6 +9,7 @@
 #include "modbus_x.h"
 #include "myConfig.h"
 
+
 #define LOG_TAG "mythread"
 #define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
 #include <ulog.h>
@@ -26,6 +27,7 @@ static struct rt_ringbuffer *rb;
 // static char mb_pool[128];    /* 用于放邮件的内存池 */
 
 #define BYTES_PER_MSG 128
+#define MAILBOX_POOL_SIZE 128
 
 // ASCII 接收消息队列
 static struct rt_messagequeue asc_recv_mq;
@@ -40,7 +42,9 @@ static rt_uint8_t asc_send_pool[40960];
 
 // ASCII 响应消息邮箱
 struct rt_mailbox asc_resp_mb;
-static rt_uint8_t asc_resp_mb_pool[128];
+// 邮箱容量是 128/4=32
+static rt_uint8_t asc_resp_mb_pool[MAILBOX_POOL_SIZE];
+#define MAX_MAIL_QUANTITY MAILBOX_POOL_SIZE/4
 
 // // RTU 接收响应消息队列
 // static struct rt_messagequeue rtu_recv_mq;
@@ -126,46 +130,86 @@ static void thread_rtu_master_entry(void *parameter)
     }
 }
 
+// #define TEST
+
 static void thread_asc_entry(void *parameter)
 {
     rt_uint16_t error_count = 0;
-
     LOG_I("thread_asc_entry");
-    struct SER_MSG ser_msg; /* 用于放置消息的局部变量 */
-    struct SER_PORT *resp_port;
-
-    ser_msg.data_ptr = rt_malloc(27 * 100);
-
+    
+    #ifdef TEST 
+      struct SER_MSG* ser_msg;
+      // struct SER_MSG* ser_msg = (struct SER_MSG*)rt_malloc(sizeof(struct SER_MSG));;
+      // ser_msg->data_size = 0;
+      // ser_msg->data_ptr = RT_NULL;
+    #else 
+      struct SER_MSG ser_msg; /* 用于放置消息的局部变量 */
+      ser_msg.data_ptr = rt_malloc(27 * 100);
+    #endif
+            // log_d("mq buf(%d)",ser_msg->data_size);
+  //
+    rt_err_t ret;
     while (1)
     {
-        while (rt_mq_recv(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG), RT_WAITING_FOREVER) == RT_EOK)
+
+        
+        // if msg queue empty then go await
+        if(!asc_recv_mq.entry)
         {
-            // if(ser_msg.data_size != rt_strlen(ser_msg.data_ptr))
-            // {
-            //     log_e(":%d,%d",ser_msg.data_size,rt_strlen(ser_msg.data_ptr));
-            //     continue;
-            // }
-
-            // log_d("mq buf(%d):%s",ser_msg.data_size,ser_msg.data_ptr);
-
-            // :010300000007F5
-            // :011700040003000B000204009B000134
-            if (ser_msg.data_size >= 8) // 27
-            {
-                rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
-
-                ascii_parse(ser_msg.data_ptr, ser_msg.data_size);
-
-                rt_mutex_release(dynamic_mutex);
-            }
-            else
-            {
-                log_d("ser_msg:%d", ser_msg.data_size);
-            }
+          rt_thread_mdelay(100);
+          continue;
         }
-    }
+       
+        log_d("asc_recv_mq.entry:%d/%d size:%d",asc_recv_mq.entry,asc_recv_mq.max_msgs,
+              asc_recv_mq.msg_size);
+        ret = rt_mq_recv(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG), RT_WAITING_FOREVER);
+        if(ret == -RT_ETIMEOUT)
+        {
+          log_w("rt_mq_recv timeout");
+          continue;
+        }else if(ret == -RT_ERROR)
+        {
 
+          log_w("rt_mq_recv error");
+          continue;
+        }
+        if(LOG_LVL == LOG_LVL_DBG)
+        {
+          log_d("ser_msg.data_size:%d port:%s",ser_msg.data_size,ser_msg.port->dev_name);
+          ulog_hexdump("asc_recv",16,ser_msg.data_ptr,ser_msg.data_size);
+        }
+        // if data_size too small then drop 
+        // :010300000007F5
+        // :011700040003000B000204009B000134
+        if(ser_msg.data_size<8)
+        {
+          log_d("ser_msg:%d", ser_msg.data_size);
+          rt_free(ser_msg.data_ptr); 
+          continue;
+        }
+        // if(ser_msg.data_size != rt_strlen(ser_msg.data_ptr))
+        // {
+        //     log_e(":%d,%d",ser_msg.data_size,rt_strlen(ser_msg.data_ptr));
+        //     continue;
+        // }
+        
+        #ifdef TEST 
+          log_d("mq buf(%d)",ser_msg->data_size);
+        #else 
+          // log_d("mq buf(%d):%s",ser_msg.data_size,ser_msg.data_ptr);
+          // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
+          ascii_parse(&ser_msg);
+          ascii_parse1(&ser_msg);
+          // ascii_response();
+          // rt_mutex_release(dynamic_mutex);
+          
+        #endif
+    }
+   #ifdef TEST
+    rt_free(ser_msg);
+   #else 
     free(ser_msg.data_ptr);
+   #endif 
 }
 
 // 由原来邮箱改为消息队列处理发送
@@ -174,28 +218,34 @@ static void thread_asc_resp_entry(void *parameter)
     rt_uint16_t error_count = 0;
 
     LOG_I("thread_asc_resp_entry");
-    struct SER_MSG ser_msg; /* 用于放置消息的局部变量 */
+    struct SER_MSG* ser_msg; /* 用于放置消息的局部变量 */
     struct SER_PORT *resp_port = RT_NULL;
     clock_t start = 0, end = 0;
     uint16_t cycles = 0;
     uint16_t write_len = 0;
+    uint16_t recv_len = 0;
+    char* recv_buf;
     while (1)
     {
 
         // 取邮件内容
         if (rt_mq_recv(&asc_send_mq, &ser_msg, sizeof(struct SER_MSG), RT_WAITING_FOREVER) == RT_EOK) // RT_TICK_PER_SECOND RT_WAITING_FOREVER
         {
+            log_d("recved asc send msg");
+            recv_len = ser_msg->data_size;
+            recv_buf = ser_msg->data_ptr; 
+            log_d("asc_send_mq recv:%d,%s",recv_len,recv_buf);
+        
             // 通过邮箱获取到请求的端口,取邮件地址
             if (rt_mb_recv(&asc_resp_mb, (rt_ubase_t *)&resp_port, 10) == RT_EOK) // 10ms
             {
                 // log_d("%s", resp_port->dev_name);
             }
-
-            if (ser_msg.data_size > 0 && resp_port != RT_NULL)
+            if (recv_len > 0 && resp_port != RT_NULL)
             {
 
                 // start = clock();
-                write_len = rs485_send(resp_port->device, ser_msg.data_ptr, ser_msg.data_size);
+                write_len = rs485_send(resp_port->device, recv_buf , recv_len);
                 // end = clock();
                 // cycles = end-start;
                 // do
@@ -206,15 +256,15 @@ static void thread_asc_resp_entry(void *parameter)
 
                 // rt_pin_write(LED_RUN, LED_OFF);
 
-                if (write_len != ser_msg.data_size)
+                if (write_len != recv_len)
                 {
                     log_e("发送失败");
                 }
                 else
                 {
                     // log_i("%s->%d %d %s",resp_port->dev_name,asc_send_mq.entry,asc_resp_mb.entry,ser_msg.data_ptr);
-                    rt_memset(ser_msg.data_ptr, 0, ser_msg.data_size);
-                    ser_msg.data_size = 0;
+                    rt_memset(recv_buf, 0, recv_len);
+                    ser_msg->data_size = 0;
                 }
             }
 
@@ -226,20 +276,20 @@ static void thread_asc_resp_entry(void *parameter)
                 nums = 2;
             }
             easyblink(led_run, nums, 50, 100);
-        }
-
-        if (asc_send_mq.entry == 0)
-        {
-            while (asc_resp_mb.entry > 0)
-            {
-                log_w("clear asc_resp_mb");
-
-                if (rt_mb_recv(&asc_resp_mb, (rt_ubase_t *)&resp_port, 1 * RT_TICK_PER_SECOND) == RT_EOK)
-                {
-                    log_w("resp_port->dev_name:%s clear mailbox", resp_port->dev_name);
-                }
             }
-        }
+
+            if (asc_send_mq.entry == 0)
+            {
+              while (asc_resp_mb.entry > 0)
+              {
+                  log_w("clear asc_resp_mb");
+
+                  if (rt_mb_recv(&asc_resp_mb, (rt_ubase_t *)&resp_port, 1 * RT_TICK_PER_SECOND) == RT_EOK)
+                  {
+                      log_w("resp_port->dev_name:%s clear mailbox", resp_port->dev_name);
+                  }
+              }
+            }
 
         // rt_thread_mdelay(1000);// 延时 1s
     }
@@ -339,9 +389,9 @@ void serial_thread_entry(void *parameter)
         ser_msg.data_size = buflen;
         ser_msg.port = port;
 
-        if (!rt_strcmp(port->prot, "ascii"))
+        // if (!rt_strcmp(port->prot, "ascii"))
         // if(index >=1)
-        {
+        // {
             // log_d("ASCII 口收到数据:%d", buflen);
 
             *(prBuf + buflen) = '\0';
@@ -364,20 +414,20 @@ void serial_thread_entry(void *parameter)
             // if(rt_mb_send(&asc_resp_mb, (struct SER_PORT *)port))
 
             // 这里还是要发送普通邮件，不能是紧急邮件，如果解析失败，需要将邮件扔掉
+            log_d("ASCII 邮箱数量(%d/%d),port:%s",asc_resp_mb.entry,asc_resp_mb.size,port->dev_name);
             if (rt_mb_send(&asc_resp_mb, (rt_uint32_t)port))
             {
-
-                log_e("ASCII 接收线程邮件发送失败\n");
+                log_e("ASCII 接收线程邮件发送失败(%d)\n",asc_resp_mb.size);
             }
 
             // 这里加一个延时会降低速度，主要是等待解析线程解析完再去清理 rx_buf
             // 优化方案，可以通过接收解析线程的邮件来处理，达到一个线程间同步的问题
             // rt_thread_delay(1000);
-        }
-        else
-        {
+        // }
+        // else
+        // {
             // RTU 口收到数据
-            log_d("RTU 口收到数据:%d", buflen);
+            // log_d("RTU 口收到数据:%d", buflen);
 
             // RTU 收到的数据是 hex 并不是所以不能直接按照字符串来打印
             // ulog_hexdump("rtu_recv",16,prBuf,buflen);
@@ -391,7 +441,7 @@ void serial_thread_entry(void *parameter)
             // {
             //     log_e("rt_mq_send rtu_recv_mq ERR\n");
             // }
-        }
+        // }
         // 不需要清理，直接覆盖即可
         // memset(port->rx_buf, 0, MAX_BUF_LENGTH);
         port->CanRecv = MAX_BUF_LENGTH;

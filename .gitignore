@@ -39,3 +39,4 @@ tags
 CMakeLists.txt
 cmake-build-debug
 *.DS_Store
+*.bkp

@@ -1,7 +1,7 @@
 #include "board.h"
 #include "modbus_x.h"
-#include "myConfig.h"
 #include "agile_modbus.h"
+#include "myThreads.h"
 
 // #include "mb.h"
 // #include "mb_m.h"
@@ -9,10 +9,10 @@
 
 #include "crc16.h"
 #include "utils.h"
-#include "board.h"
+
 
 #define LOG_TAG "modbusx"
-#define LOG_LVL LOG_LVL_ERROR // LOG_LVL_DBG LOG_LVL_ERROR
+#define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
 //
 #include <ulog.h>
 
@@ -270,9 +270,67 @@ int rtu_read_holdings(int regStartAddr, int regCnt, uint16_t *holdBuf)
     return ret;
 }
 
-// 解析收到的 ascii 帧
-uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
+uint8_t ascii_response(struct ASC_FRAME_META *meta)
 {
+
+  log_d("从机地址:%d", meta->slaveAddr);
+  log_d("功能码:%d Reading/writing multiple registers", meta->function);
+  log_d("读起始地址:%d", meta->rdHead);
+  log_d("读寄存器数量:%d", meta->rdQuantity);
+  log_d("写起始地址:%d", meta->wrHead);
+  log_d("写寄存器数量:%d", meta->wrRegQuantity);
+  log_d("写字节长度:%d", meta->wrByteQuantity);
+
+  for(uint8_t i;i<meta->wrByteQuantity;i++)
+  {
+    rt_kprintf("%d ",meta->wrBuf[i]);
+  }
+
+
+  // switch(funcode)
+  // {
+  //   case 03:
+  //   break;
+  //   case 06:
+  //   break;
+  //   case 16:
+  //   break;
+  //   case 23:
+  //   break;
+  //   default:
+  //       log_w("Not support funcode:%d", funcode);
+  //       break;
+  //   break;
+  // }
+
+}
+
+rt_err_t ascii_parse(struct SER_MSG* ser_msg)
+{
+  char* ptrFrame = ser_msg->data_ptr;
+  rt_uint32_t frame_len = ser_msg->data_size;
+  struct ASC_FRAME_META asc_frame_meta;
+  
+  uint16_t i;
+  
+  log_d("ascii_parse:");
+  if (LOG_LVL == LOG_LVL_DBG)
+  {
+      for (i = 0; i < frame_len; i++)
+      {
+          rt_kprintf("%c", *(ptrFrame + i));
+      }
+  }
+
+
+}
+
+// 解析收到的 ascii 帧
+rt_err_t ascii_parse1(struct SER_MSG* ser_msg)
+{
+   char* ptrFrame = ser_msg->data_ptr;
+   rt_uint32_t frame_len = ser_msg->data_size;
+
 
     uint8_t ret = 0;
 
@@ -317,14 +375,6 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
 
     int rc = 0;
 
-    log_d("ascii_parse");
-    if (LOG_LVL == LOG_LVL_DBG)
-    {
-        for (i = 0; i < frame_len; i++)
-        {
-            rt_kprintf("%c", *(ptrFrame + i));
-        }
-    }
 
     for (i = 0, j = 0; i < frame_len; i++)
     {
@@ -431,14 +481,15 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
 
         else if (asc_funcode == 0x17)
         {
-            ReadDatStAdd = ATOHInt(ptrFrame + i + j);
-            j += 4;
-            // log_d("ReadDatStAdd:%04x", ReadDatStAdd);
 
             // 功能代码23（0x17)要读取的数据起始地址，占4个字节[3]~[6]
+            ReadDatStAdd = ATOHInt(ptrFrame + i + j);
+            j += 4;
+            log_d("ReadDatStAdd:%04x", ReadDatStAdd);
+
             ReadDatLenth = ATOHInt(ptrFrame + i + j);
             j += 4;
-            // log_d("ReadDatLenth:%04x", ReadDatLenth);
+            log_d("ReadDatLenth:%04x", ReadDatLenth);
 
             // 功能代码23（0x17)要读取的数据长度，占4个字节[7]~[10]
 
@@ -522,6 +573,8 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
 
     log_w("i:%d frame_len:%d", i, frame_len);
 
+
+
     if (i == frame_len)
     {
         log_e("未找到帧头%d %d", i, frame_len);
@@ -557,6 +610,8 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
 
     end = clock();
     log_d("解析完毕,用时:%dms", end - start);
+
+
 
     switch (asc_funcode)
     {
@@ -754,6 +809,8 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
         log_d("写寄存器数量:%d", WriteDatLenth);
         log_d("写字节长度:%d", WriteByteNum);
 
+
+
         // https://www.cnblogs.com/iluzhiyong/p/4929165.html
         // https://blog.csdn.net/liboxiu/article/details/86473516
         // https://www.cnblogs.com/wt88/p/9624373.html
@@ -795,6 +852,7 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
             }
 
             rt_memset(g_ctx->send_buf, 0, g_ctx->send_bufsz);
+
             send_len = agile_modbus_serialize_write_registers(g_ctx, WriteDatStAdd, WriteDatLenth, (const uint16_t *)&rtu_wr_buf);
             rs485_send(g_stConfig.serPort[0].device, g_ctx->send_buf, send_len);
             // char *retBuf = rt_malloc(g_ctx->read_bufsz);
@@ -903,6 +961,7 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
         // : 01 17 1A 0328 0000 0000 0010 0000 0000 0000 0000 0000 0000 0000 0000 0000 93\CR\LF
         // : 01 17 1A 000C 0022 0038 004E 000C 000C 000C 000C 000C 000C 000C 000C 0001 B9
 
+
         bytesCnt = ReadDatLenth * 2;
 
         // pwBuf 长度:是整个 frame 的长度，避免再次分配内存，这里一次分配
@@ -912,6 +971,11 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
         // log_w("bufLen:%d",bufLen);
         // 多分配 1 个字节，用于保存 '\0'
         pwBuf = rt_malloc(bufLen + 1);
+        if(pwBuf == NULL) 
+        {
+          rt_kprintf("malloc failed\r\n");
+        }
+        
         rt_memset(pwBuf, '\0', bufLen + 1);
         // 写入 bytesCnt
         *pwBuf = ':';
@@ -955,22 +1019,23 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
         *(pwBuf + bufLen) = '\0';
 
         break;
-    default:
-        log_w("Not support asc_funcode:%d", asc_funcode);
-        break;
     }
 
-    log_d("ready2send:%s", pwBuf);
 
     // log_i("邮箱中消息的数目:%d",asc_resp_mb.entry);
     // 统一回复上位机
     // while (asc_resp_mb.entry > 0)
     // {
 
-    // 将恢复消息发送到队列
-    struct SER_MSG ser_msg;
-    ser_msg.data_ptr = pwBuf;
-    ser_msg.data_size = bufLen;
+    // 将回复消息发送到队列
+    // ser_msg->data_ptr = pwBuf;
+    // ser_msg->data_size = bufLen;
+    // ptrFrame = pwBuf;
+    ser_msg->data_ptr = pwBuf;
+    ser_msg->data_size = bufLen;
+   
+    
+    log_d("ready2send frame_len:%d %s",ser_msg->data_size,ser_msg->data_ptr);
 
     uint32_t result = rt_mq_send(&asc_send_mq, &ser_msg, sizeof(struct SER_MSG));
     if (result != RT_EOK)
@@ -986,6 +1051,10 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
         }
     }
 
+    log_d("ready2send frame_len:%d %s",frame_len,ptrFrame);
+    return 0;
+
+
     // }
     // 统一都回复 23 号指令
     // response_ascii_frame(slaveAddr,23,pwBuf,bufLen);
@@ -997,26 +1066,15 @@ uint8_t ascii_parse(char *ptrFrame, rt_uint32_t frame_len)
 
 exit:
 
-    if (pwBuf)
-        rt_free(pwBuf);
-
-    if (pAscWbuf)
-        rt_free(pAscWbuf);
+    // if (pwBuf)
+    //     rt_free(pwBuf);
+    //
+    // if (pAscWbuf)
+    //     rt_free(pAscWbuf);
 
     return ret;
 }
 
-struct RTU_FRAME
-{
-    uint8_t slaveAddr;
-    uint8_t funCode;
-    uint8_t byteCnt;
-    uint8_t resovled;
-    // // 本来想在这里定义为 uint16_t 的指针，后来发现反而不合适，需要把16 位数组装起来，然后还要拆开来，否则在转换为 ASCII 码的时候字节顺序不对
-    // // 比如 0x1234 会变为 33 34 31 32 也就是 3412
-    // uint8_t *pBytes;
-    uint16_t crc;
-};
 
 // uint8_t parse_rtu_frame(char *ptrFrame, rt_uint16_t frame_len)
 // {
@@ -1138,7 +1196,7 @@ static rt_err_t uart_tx_com(rt_device_t dev, void *buffer)
 /* 接收数据回调函数 */
 static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size)
 {
-    struct rx_msg msg;
+    struct UART_RX_MSG msg;
 
     msg.dev = dev;
     msg.size = size;
@@ -1169,7 +1227,6 @@ static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size)
     return 0;
 }
 
-extern void serial_thread_entry(void *parameter);
 #define THREAD_TIMESLICE 5
 #define THREAD_PRIORITY 5
 #define THREAD_STACK_SIZE 1024

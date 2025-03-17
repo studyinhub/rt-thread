@@ -1,14 +1,3 @@
-/**************************************************************************/ /**
-*
-* @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
-*
-* SPDX-License-Identifier: Apache-2.0
-*
-* Change Logs:
-* Date            Author       Notes
-* 2020-12-12      Wayne        First version
-*
-******************************************************************************/
 #include <string.h>
 #include <rtconfig.h>
 #include <rtdevice.h>
@@ -30,7 +19,6 @@
 
 #include "myWebnet.h"
 
-// #include "easyflash.h"
 
 #ifdef LOG_TAG
 #undef LOG_TAG

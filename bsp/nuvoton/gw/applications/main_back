@@ -303,24 +303,12 @@ void nu_button_cb(void *args)
 
 #define WDT_DEVICE_NAME "wdt" /* 看门狗设备名称 */
 
-rt_device_t wdg_dev; /* 看门狗设备句柄 */
 
-static void idle_hook(void)
-{
-    /* 在空闲线程的回调函数里喂狗 */
-
-    if (wdg_dev != RT_NULL)
-    {
-        rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_KEEPALIVE, NULL);
-    }
-}
 
 int main(int argc, char **argv)
 {
     rt_err_t ret;
     LOG_I("The current version of APP firmware is %s\n", versionString);
-
-    rt_thread_idle_sethook(idle_hook);
 
 #if defined(AIRSYS)
 

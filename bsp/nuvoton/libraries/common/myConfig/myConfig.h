@@ -6,6 +6,9 @@
 
 #include <dfs_posix.h> /* 当需要使用文件操作时，需要包含这个头文件 */
 
+#include "easyblink.h"
+
+
 #include "cJSON.h"
 
 #include "tftp.h"
@@ -20,6 +23,9 @@ char g_BUF_CONFIG_JSON[MAX_CONFIG_JSON_SIZE];
 extern rt_bool_t webnet_in_ram;
 extern char g_FmtTimeStr[50];
 
+#define SER_PORTS_CNT 3
+
+
 struct SER_PORT
 {
     char dev_name[6];      // uart1 uart6 RT_NAME_MAX
@@ -32,6 +38,13 @@ struct SER_PORT
     int CanRecv;                 // 可以接收的数据
     char rx_buf[MAX_BUF_LENGTH]; // 从上位机接收到的最大的 buf 大小
     char tx_buf[MAX_BUF_LENGTH]; // 发送 buf
+};
+
+struct SER_MSG
+{
+    rt_uint8_t *data_ptr;  /* 数据块首地址 */
+    rt_uint32_t data_size; /* 数据块大小   */
+    struct SER_PORT *port; /*来自端口，或者说这条消息要返回给那个 ascii 端口*/
 };
 
 struct RTU_SYS
@@ -61,6 +74,11 @@ struct CONFIG
     struct RTU_SYS rtuSys;
     struct ASC_SYS ascSys[3];
 };
+
+
+extern ebled_t led_run;
+extern ebled_t led_wrk;
+
 
 extern char g_BUF_CONFIG_JSON[MAX_CONFIG_JSON_SIZE];
 

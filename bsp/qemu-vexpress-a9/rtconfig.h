@@ -183,6 +183,7 @@
 #define RT_USING_LWIP
 #define RT_USING_LWIP212
 #define RT_LWIP_MEM_ALIGNMENT 4
+#define RT_LWIP_IGMP
 #define RT_LWIP_ICMP
 #define RT_LWIP_DNS
 #define RT_LWIP_DHCP
@@ -233,6 +234,85 @@
 #define RT_USING_LWP
 
 /* RT-Thread Utestcases */
+
+
+/* RT-Thread online packages */
+
+/* IoT - internet of things */
+
+
+/* Wi-Fi */
+
+/* Marvell WiFi */
+
+
+/* Wiced WiFi */
+
+
+/* IoT Cloud */
+
+
+/* security packages */
+
+
+/* language packages */
+
+/* JSON: JavaScript Object Notation, a lightweight data-interchange format */
+
+
+/* XML: Extensible Markup Language */
+
+
+/* multimedia packages */
+
+/* LVGL: powerful and easy-to-use embedded GUI library */
+
+
+/* u8g2: a monochrome graphic library */
+
+
+/* tools packages */
+
+
+/* system packages */
+
+/* enhanced kernel services */
+
+
+/* acceleration: Assembly language or algorithmic acceleration packages */
+
+
+/* CMSIS: ARM Cortex-M Microcontroller Software Interface Standard */
+
+
+/* Micrium: Micrium software products porting for RT-Thread */
+
+
+/* peripheral libraries and drivers */
+
+/* sensors drivers */
+
+
+/* touch drivers */
+
+
+/* Kendryte SDK */
+
+
+/* AI packages */
+
+
+/* Signal Processing and Control Algorithm Packages */
+
+
+/* miscellaneous packages */
+
+/* project laboratory */
+
+/* samples: kernel and components samples */
+
+
+/* entertainment: terminal games and other interesting software packages */
 
 #define SOC_VEXPRESS_A9
 #define RT_USING_UART0

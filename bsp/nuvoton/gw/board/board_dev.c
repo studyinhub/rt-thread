@@ -1,21 +1,24 @@
 /**************************************************************************/ /**
-                                                                              *
-                                                                              * @copyright (C) 2021 yangxiyuan. All rights reserved.
-                                                                              *
-                                                                              * Change Logs:
-                                                                              * Date            Author            Notes
-                                                                              * 2021-11-25      yangxiyuan        First version
-                                                                              *
-                                                                              ******************************************************************************/
+*
+* @copyright (C) 2021 yangxiyuan. All rights reserved.
+*
+* Change Logs:
+* Date            Author            Notes
+* 2021-11-25      yangxiyuan        First version
+*
+******************************************************************************/
 #include <string.h>
 #include <rtconfig.h>
 #include <rtdevice.h>
 #include <drv_uart.h>
-#include "easyblink.h"
 
 #define LOG_TAG "board"
 #define LOG_LVL LOG_LVL_DBG
 #include <ulog.h>
+
+#include "board.h"
+
+
 #include "main.h"
 #include "mnt.h"
 #include "cJSON.h"
@@ -25,6 +28,8 @@
 
 #include "drv_qspi.h"
 #include "spinand.h"
+
+
 
 // 一个 block 是 64 page，page 是 2k, block:128k
 // uboot:0x100000 8 - 15 block ;1MB; 325k ~ 2.53 block, 325- 128*2 = 69k,  34.5page mtd_nand read nand0 10 43
@@ -314,8 +319,6 @@ void nu_button_cb(void *args)
     }
 }
 
-ebled_t led_run = RT_NULL;
-ebled_t led_wrk = RT_NULL;
 
 int test_led(int argc, char **argv)
 {
@@ -343,8 +346,11 @@ int test_led(int argc, char **argv)
 }
 
 MSH_CMD_EXPORT(test_led, test led gpio);
-// extern ebled_t led_run;
-// extern ebled_t led_wrk;
+
+
+ebled_t led_run = RT_NULL;
+ebled_t led_wrk = RT_NULL;
+
 int board_init(void)
 {
 
