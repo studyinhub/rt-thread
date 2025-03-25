@@ -13,4 +13,5 @@
 
 extern rt_device_t wdg_dev; /* 看门狗设备句柄 */
 extern int enable_wdt();
+extern int feed_wdt(uint8_t feed_from);
 #endif

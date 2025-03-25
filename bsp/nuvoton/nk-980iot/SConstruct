@@ -43,6 +43,7 @@ Export('SDK_LIB')
 objs = PrepareBuilding(env, RTT_ROOT, has_libcpu=False)
 
 nuvoton_library = 'nuc980'
+
 rtconfig.BSP_LIBRARY_TYPE = nuvoton_library
 
 

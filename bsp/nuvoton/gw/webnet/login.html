@@ -1,0 +1,102 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+
+<head>
+    <script type="text/javascript">
+        function check(form) {
+            var a = form.username.value;
+            var b = form.password.value;
+            console.log("check input")
+
+            // if (a != "admin") {
+            //     alert("User name error,Please input correct user name!");
+            // } else {
+            //     if (b != "admin") {
+            //         alert("Pass word error,Please input correct pass word!");
+            //     } else {
+            //         form.submit();
+            //     }
+            // }
+        }
+
+        function addToast() {
+            console.log("登录成功")
+            $.Toast("Notice", "登录成功.", "success", {
+                stack: false,
+                has_icon: true,
+                has_close_btn: true,
+                fullscreen: true,
+                timeout: 1000,
+                sticky: false,
+                has_progress: true,
+                rtl: false,
+            });
+        }
+
+
+        $(document).ready(function () {
+
+            $("#login").click(function () {
+                console.log("login clicked");
+                console.log($("#username").val())
+
+                addToast()
+
+                setTimeout(function () {
+                    window.location.href = "./config.shtml"
+                }, 2000);
+                // 
+            })
+
+
+            var config = JSON.parse(localStorage.getItem('config'))
+        })
+
+
+
+    </script>
+</head>
+
+<body>
+
+
+    <center>
+        <h2>用户登录</h2>
+        <!-- <form name="login" action="./cgi-bin/hello" method="post" style="background-color: antiquewhite; width: 50%;"> -->
+        <form name="login">
+            <br />
+            <label>用&nbsp户&nbsp名：</label>
+            <input type="text" name="username" id="username" value="admin" />
+            <br /><br />
+
+            <label>密&nbsp &nbsp &nbsp码：</label>
+            <input type="password" name="password" id="password" value="admin" />
+            <br /><br />
+
+            <input type="button" name="login" id="login" style="position:absolute; left:48%;" value="登录"
+                onclick="check(form)" />&nbsp &nbsp &nbsp
+            <input type="reset" name="reset" id="reset" style="position:absolute; left:52%;" value="重置" /><br /><br />
+        </form>
+
+        <!--
+        <button type="button" onclick="document.getElementById('demo').innerHTML = Date()">
+            点击这里来显示日期和时间
+        </button>
+
+        <p id="demo">
+            当前日期
+        </p>
+
+        <div>
+            <button class="button-success pure-button">Success Button</button>
+            <button class="button-error pure-button">Error Button</button>
+            <button class="button-warning pure-button">Warning Button</button>
+            <button class="button-secondary pure-button">Secondary Button</button>
+        </div>
+        -->
+    </center>
+
+
+</body>
+
+</html>

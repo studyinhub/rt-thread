@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 extern int threads_init(void);
-extern rt_mutex_t dynamic_mutex;
-extern void serial_thread_entry(void *parameter);
+// extern rt_mutex_t dynamic_mutex;
 
 #endif

@@ -12,16 +12,30 @@
 
 rt_device_t wdg_dev; /* 看门狗设备句柄 */
 
-static void idle_hook(void)
-{
-    /* 在空闲线程的回调函数里喂狗 */
 
+
+int feed_wdt(uint8_t feed_from)
+{
+    rt_uint32_t timeleft = 0; 
     if (wdg_dev != RT_NULL)
     {
+        // rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_GET_TIMELEFT, &timeleft);
+        // rt_kprintf("feed_wdt:%d ------------\r\n",feed_from);
         // rt_pin_write(LED_1, !(rt_pin_read(LED_1)));
+    // if(timeleft<WDT_TIMEOUT>>1)
+    // {
+    // }
         rt_device_control(wdg_dev, RT_DEVICE_CTRL_WDT_KEEPALIVE, NULL);
     }
 }
+
+/* 在空闲线程的回调函数里喂狗 */
+static void idle_hook(void)
+{
+   feed_wdt(0);
+}
+
+
 // #define ENABLE_WDT RT_TRUE
 int enable_wdt()
 {
@@ -50,7 +64,7 @@ int enable_wdt()
         rt_kprintf("start %s failed!\n", "wdt");
         return -RT_ERROR;
     }
-    log_i("Watchdog is ON!Don't forget feed the dog in %d seconds peroidly!", timeout);
+    log_i("Don't forget feed the dog in %d seconds!", timeout);
 
     rt_thread_idle_sethook(idle_hook);
 }

@@ -61,7 +61,6 @@
 
 /* C++ features */
 
-
 /* Command shell */
 
 #define RT_USING_FINSH
@@ -158,7 +157,6 @@
 
 /* Using USB */
 
-
 /* POSIX layer and C standard library */
 
 #define RT_USING_LIBC
@@ -238,9 +236,7 @@
 
 /* AT commands */
 
-
 /* VBUS(Virtual Software BUS) */
-
 
 /* Utilities */
 
@@ -264,7 +260,6 @@
 #define UTEST_THR_PRIORITY 20
 
 /* RT-Thread Utestcases */
-
 
 /* RT-Thread online packages */
 
@@ -295,7 +290,6 @@
 
 /* Marvell WiFi */
 
-
 /* Wiced WiFi */
 
 #define PKG_USING_NETUTILS
@@ -313,12 +307,9 @@
 
 /* IoT Cloud */
 
-
 /* security packages */
 
-
 /* language packages */
-
 
 /* multimedia packages */
 
@@ -341,7 +332,6 @@
 
 /* u8g2: a monochrome graphic library */
 
-
 /* tools packages */
 
 #define PKG_USING_MEM_SANDBOX
@@ -351,9 +341,7 @@
 
 /* acceleration: Assembly language or algorithmic acceleration packages */
 
-
 /* CMSIS: ARM Cortex-M Microcontroller Software Interface Standard */
-
 
 /* Micrium: Micrium software products porting for RT-Thread */
 
@@ -367,14 +355,11 @@
 
 /* peripheral libraries and drivers */
 
-
 /* AI packages */
-
 
 /* miscellaneous packages */
 
 /* samples: kernel and components samples */
-
 
 /* entertainment: terminal games and other interesting software packages */
 
@@ -424,6 +409,5 @@
 #define BOARD_USING_STORAGE_SPINAND
 
 /* Board extended module drivers */
-
 
 #endif

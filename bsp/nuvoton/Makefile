@@ -60,10 +60,13 @@ gpack:
 	echo "重命名" $(dateSuffix)
 	@mv -f ./rtthread_pack.bin ./$(pack_file)
 
-bpack: 
+bpack:
+	-nutool bpack
 	${NUWRITER} ${BURN_PACK_INI}		
 
 deploy:
 	zsh ./deploy.zsh ${DIST_NAME}
 clear:
+	scons -c
+clean:
 	scons -c

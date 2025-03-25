@@ -1,0 +1,9 @@
+CompileFlags:
+  Add: [
+    "-I/Users/yangxiyuan/projects/rtt-projects/rt-thread/include",
+    "-I/Users/yangxiyuan/projects/rtt-projects/rt-thread/include/libc",
+    "-I/Users/yangxiyuan/projects/rtt-projects/rt-thread/bsp/nuvoton/gw",
+    "-I/Users/yangxiyuan/projects/rtt-projects/rt-thread/bsp/nuvoton/gw/board",
+    "-I/Users/yangxiyuan/projects/rtt-projects/rt-thread/bsp/nuvoton/libraries/nuc980/Driver/Include",
+    "-I/Users/yangxiyuan/projects/rtt-projects/rt-thread/bsp/nuvoton/libraries/nuc980/rtt_port"
+  ]

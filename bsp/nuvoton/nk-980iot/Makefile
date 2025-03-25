@@ -61,3 +61,5 @@ deploy:
 	zsh ./deploy.zsh ${DIST_NAME}
 clear:
 	scons -c
+clean:
+	scons -c
