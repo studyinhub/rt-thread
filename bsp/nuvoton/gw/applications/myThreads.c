@@ -3,6 +3,7 @@
 #include "modbus_x.h"
 #include "myConfig.h"
 #include "rtconfig.h"
+#include "rtdef.h"
 #include "rtthread.h"
 #include <rtdevice.h>
 #include <sys/types.h>
@@ -86,7 +87,7 @@ static void thread_rtu_master_entry(void *parameter) {
   rt_memset(g_stConfig.rtuSys.hold, 0,
             sizeof(uint16_t) * g_stConfig.rtuSys.scanRegCnt);
 
-  struct SER_MSG ser_msg; /* 用于放置消息的局部变量 */
+  struct SER_MSG ser_msg;
   ser_msg.data_size = 0;
   ser_msg.data_ptr = rt_malloc(1024);
 
@@ -99,19 +100,25 @@ static void thread_rtu_master_entry(void *parameter) {
   uint16_t rtu_wr_buf[AGILE_MODBUS_MAX_WRITE_REGISTERS];
 
   while (1) {
+
     // 总扫描开关
     if (!g_stConfig.rtuSys.scanEnable) {
+      rt_thread_delay(100);
       continue;
     }
 
     // if msg queue empty then go await
     if (!rtu_send_mq.entry) {
+
       rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
                                       g_stConfig.rtuSys.scanRegCnt,
                                       g_stConfig.rtuSys.hold);
+
+      rt_thread_delay(100);
       continue;
     }
 
+    // rt_memset(g_ctx->read_buf, 0, g_ctx->read_bufsz);
     ret = rt_mq_recv(&rtu_send_mq, &ser_msg, sizeof(struct SER_MSG), 100);
 
     if (ret != RT_EOK) {
@@ -325,6 +332,9 @@ static void thread_asc_entry(void *parameter) {
 
     if (ret != RT_EOK) {
       log_e("ascii_build_response error,no send");
+      if (ret == RT_ENOSYS) {
+        log_e("not set sys");
+      }
       continue;
     }
 
@@ -502,10 +512,8 @@ static void thread_asc_entry(void *parameter) {
 
 #include "agile_modbus.h"
 
-static struct rt_timer timer1;
 static int cnt = 0;
 
-static void cb_timer1(void *parameter) { log_d("Timer"); }
 
 int threads_init(void) {
   rt_err_t result = RT_EOK;
@@ -625,8 +633,6 @@ int threads_init(void) {
 
   // rt_thread_startup(&thread_rtu);
 
-  // rt_timer_init(&timer1,"tm1",cb_timer1,RT_NULL,RT_TICK_PER_SECOND,RT_TIMER_FLAG_PERIODIC);
-  // rt_timer_start(&timer1);
 
   // // 轮询数据线程
   // rt_thread_t thread_mbsend = rt_thread_create("md_m_send",
@@ -726,11 +732,10 @@ void serial_thread_entry(void *parameter) {
 
   while (1) {
 
-    readlen = rs485_receive(port, prBuf, MAX_BUF_LENGTH, 50);
-
     // rt_sem_control(&g_stConfig.serPort[index].rx_sem, RT_IPC_CMD_RESET,
-    // RT_NULL); rt_sem_take(&g_stConfig.serPort[index].rx_sem,
-    // RT_WAITING_FOREVER);
+    // RT_NULL);
+    // rt_sem_take(&g_stConfig.serPort[index].rx_sem, RT_WAITING_FOREVER);
+    readlen = rs485_receive(port, prBuf, MAX_BUF_LENGTH, 50);
     //
     // start = clock();
     // // 从第1个字节开始计时，超过 10ms，就终止本次读取
@@ -778,7 +783,6 @@ void serial_thread_entry(void *parameter) {
     ser_msg.port = port;
 
     if (index >= 1) {
-
       *(prBuf + readlen) = '\0';
       log_d("ASCII 口收到数据(%d/%d)%s", readlen, port->CanRecv, prBuf);
 

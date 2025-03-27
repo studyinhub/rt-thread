@@ -59,7 +59,7 @@ function tConfig() {
 function upload() {
   echo "上传${CUR_PATH}/$1 到 $2"
 
-  curl -T ${CUR_PATH}/update_win/pack_src/webnet/$1 tftp://${TARGET_IP}/$2
+  curl -T ${CUR_PATH}/upload_win/pack_src/webnet/$1 tftp://${TARGET_IP}/$2
 
 }
 

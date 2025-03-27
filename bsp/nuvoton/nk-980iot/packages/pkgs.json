@@ -1,0 +1,52 @@
+[
+ {
+  "path": "/packages/iot/webnet", 
+  "ver": "v2.0.2", 
+  "name": "WEBNET"
+ }, 
+ {
+  "path": "/packages/iot/cJSON", 
+  "ver": "v1.7.15", 
+  "name": "CJSON"
+ }, 
+ {
+  "path": "/packages/iot/netutils", 
+  "ver": "v1.3.0", 
+  "name": "NETUTILS"
+ }, 
+ {
+  "path": "/packages/multimedia/wavplayer", 
+  "ver": "latest", 
+  "name": "WAVPLAYER"
+ }, 
+ {
+  "path": "/packages/multimedia/helix", 
+  "ver": "latest", 
+  "name": "HELIX"
+ }, 
+ {
+  "path": "/packages/multimedia/mp3player", 
+  "ver": "latest", 
+  "name": "MP3PLAYER"
+ }, 
+ {
+  "path": "/packages/tools/mem_sandbox", 
+  "ver": "latest", 
+  "name": "MEM_SANDBOX"
+ }, 
+ {
+  "path": "/packages/system/uffs", 
+  "ver": "latest", 
+  "name": "UFFS"
+ }, 
+ {
+  "path": "/packages/system/ramdisk", 
+  "ver": "latest", 
+  "name": "RAMDISK"
+ }, 
+ {
+  "path": "/packages/misc/optparse", 
+  "ver": "latest", 
+  "name": "OPTPARSE"
+ }
+]

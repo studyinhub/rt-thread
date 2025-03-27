@@ -92,6 +92,10 @@ void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type)
     }
 }
 
+static struct rt_timer timer1;
+static void cb_timer1(void *parameter) { log_e("Timer:%s", parameter); }
+
+
 int main(int argc, char **argv)
 {
     rt_err_t ret;
@@ -105,6 +109,11 @@ int main(int argc, char **argv)
     init_ser_ports();
 
     log_d("web_root:%s", WEB_ROOT);
+
+    rt_timer_init(&timer1, "tm1", cb_timer1, "tm1", RT_TICK_PER_SECOND,
+                RT_TIMER_FLAG_PERIODIC);
+    rt_timer_start(&timer1);
+
     threads_init();
 
     rt_thread_t tid_m_poll = RT_NULL, tid2 = RT_NULL, tid_s_poll = RT_NULL;

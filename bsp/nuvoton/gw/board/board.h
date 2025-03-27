@@ -3,7 +3,7 @@
 
 #include "NuMicro.h"
 #include <drv_gpio.h>
-#include <drv_sys.h>
+// #include <drv_sys.h>
 
 #if defined(__CC_ARM)
 extern int Image$$RW_RAM1$$ZI$$Limit;

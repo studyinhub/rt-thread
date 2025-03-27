@@ -1,0 +1,32 @@
+[
+ {
+  "path": "/packages/iot/netutils", 
+  "ver": "v1.2.0", 
+  "name": "NETUTILS"
+ }, 
+ {
+  "path": "/packages/tools/mem_sandbox", 
+  "ver": "latest", 
+  "name": "MEM_SANDBOX"
+ }, 
+ {
+  "path": "/packages/system/fal", 
+  "ver": "latest", 
+  "name": "FAL"
+ }, 
+ {
+  "path": "/packages/system/ramdisk", 
+  "ver": "latest", 
+  "name": "RAMDISK"
+ }, 
+ {
+  "path": "/packages/misc/optparse", 
+  "ver": "latest", 
+  "name": "OPTPARSE"
+ }, 
+ {
+  "path": "/packages/misc/vi", 
+  "ver": "latest", 
+  "name": "VI"
+ }
+]

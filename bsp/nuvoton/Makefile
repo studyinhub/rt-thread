@@ -31,7 +31,16 @@ reset:
 build:
 	scons -j 8
 
-nand:reset erase
+erase: 
+	@echo "erase whole chip"
+	-nutool whole erase 
+
+bpack:
+	# -nutool bpack
+	${NUWRITER} ${BURN_PACK_INI}
+
+
+nand:reset
 	${NUWRITER} ${NAND_INI}
 
 menuconfig:
@@ -49,9 +58,9 @@ auto_version:
 
 image:
 	@echo "use space Not tab before ifneq and endif"
-    ifneq ($(wildcard "images/uffs.bin"),)
-		@rm ./images/uffs.bin
-    endif
+		ifneq ($(wildcard "images/uffs.bin"),)
+		  @rm ./images/uffs.bin
+		endif
 	./mkuffs -c -v --file ./images/uffs.bin --page-size 2048 --spare-size 64 --block-pages 64 --total-blocks 16 --ecc-option none --mount /,24,50 --exec script.ufs
 
 gpack:
@@ -60,9 +69,6 @@ gpack:
 	echo "重命名" $(dateSuffix)
 	@mv -f ./rtthread_pack.bin ./$(pack_file)
 
-bpack:
-	-nutool bpack
-	${NUWRITER} ${BURN_PACK_INI}		
 
 deploy:
 	zsh ./deploy.zsh ${DIST_NAME}

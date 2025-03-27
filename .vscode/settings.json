@@ -4,5 +4,6 @@
     "files.associations": {
         "*.html": "html",
         "rtdevice.h": "c"
-    }
+    },
+    "search.useIgnoreFiles": false
 }

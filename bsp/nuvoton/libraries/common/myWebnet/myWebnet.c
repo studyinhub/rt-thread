@@ -130,7 +130,7 @@ void cgi_reset_handler(struct webnet_session *session)
     const char *mimetype;
     session->request->result_code = 200;
     static const char *status = "{\"data\":\"ok\"}";
-
+    log_d("reset");
     mimetype = mime_get_type(".json");
 
     /* set http header */
@@ -188,7 +188,7 @@ void cgi_getconfig_handler(struct webnet_session *session)
     RT_ASSERT(session != RT_NULL);
 
     /* get mimetype */
-    mimetype = mime_get_type(".html");
+    mimetype = mime_get_type("html");
     load_config();
 
     // cJSON_AddItemToObject(g_root, "webnet_in_ram", cJSON_CreateBool(webnet_in_ram));
@@ -197,7 +197,7 @@ void cgi_getconfig_handler(struct webnet_session *session)
 
     /* set http header */
     session->request->result_code = 200;
-    webnet_session_set_header(session, mimetype, 200, "Ok", strlen(g_BUF_CONFIG_JSON));
+    webnet_session_set_header(session, mime_get_type("json"), 200, "Ok", strlen(g_BUF_CONFIG_JSON));
     webnet_session_write(session, (const rt_uint8_t *)g_BUF_CONFIG_JSON, rt_strlen(g_BUF_CONFIG_JSON));
 }
 
@@ -341,8 +341,9 @@ int init_webnet(char *root_path)
     webnet_set_root(root_path);
 
 #ifdef WEBNET_USING_CGI
-    webnet_cgi_register("clear", cgi_clear_handler);
+   // http://192.168.2.200/cgi-bin/reset
     webnet_cgi_register("reset", cgi_reset_handler);
+    webnet_cgi_register("clear", cgi_clear_handler);
     webnet_cgi_register("hello", cgi_hello_handler);
     webnet_cgi_register("get_config", cgi_getconfig_handler);
     webnet_cgi_register("put_config", cgi_putconfig_handler);

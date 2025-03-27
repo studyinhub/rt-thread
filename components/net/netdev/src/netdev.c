@@ -23,7 +23,7 @@
 #endif /* RT_USING_SAL */
 
 #define DBG_TAG              "netdev"
-#define DBG_LVL              DBG_INFO
+#define DBG_LVL              DBG_ERROR
 #include <rtdbg.h>
 
 /* The list of network interface device */
@@ -1196,7 +1196,7 @@ static void netdev_set_dns(char *netdev_name, uint8_t dns_num, char *dns_server)
     inet_aton(dns_server, &dns_addr);
     if (netdev_set_dns_server(netdev, dns_num, &dns_addr) == RT_EOK)
     {
-        rt_kprintf("set network interface device(%s) dns server #%d: %s\n", netdev_name, dns_num, dns_server);
+        LOG_I("set network interface device(%s) dns server #%d: %s", netdev_name, dns_num, dns_server);
     }
 }
 
