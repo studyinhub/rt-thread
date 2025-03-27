@@ -30,7 +30,8 @@ extern char g_FmtTimeStr[50];
 
 #pragma pack(4)
 struct SER_PORT {
-  char dev_name[6];      // uart1 uart6 RT_NAME_MAX
+  uint8_t device_id;
+  char dev_name[7];// uart1 uart6 RT_NAME_MAX
   uint8_t slaveAddr;     // slaveAddr
   uint8_t frameInterval; // 帧间隔，9600 buadrate => 9600 / (2+9+1) < 1
   char prot[6];          // ascii,rtu
@@ -86,7 +87,7 @@ struct ASC_SYS {
 
 struct CONFIG {
   uint16_t mapEnable;
-  struct SER_PORT serPort[3];
+  struct SER_PORT serPorts[3];
   struct RTU_SYS rtuSys;
   struct ASC_SYS ascSys[3];
 };

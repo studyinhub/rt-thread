@@ -25,7 +25,7 @@
 #endif
 
 #define LOG_TAG "main"
-#define LOG_LVL LOG_LVL_DBG
+#define LOG_LVL LOG_LVL_INFO
 #include <ulog.h>
 
 static int set_date_time()
@@ -93,7 +93,7 @@ void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type)
 }
 
 static struct rt_timer timer1;
-static void cb_timer1(void *parameter) { log_e("Timer:%s", parameter); }
+static void cb_timer1(void *parameter) { log_d("Timer:%s", parameter); }
 
 
 int main(int argc, char **argv)
@@ -106,6 +106,7 @@ int main(int argc, char **argv)
     set_date_time();
     enable_wdt();
     load_config();
+
     init_ser_ports();
 
     log_d("web_root:%s", WEB_ROOT);

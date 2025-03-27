@@ -862,13 +862,14 @@ long list_device(void)
                 rt_hw_interrupt_enable(level);
 
                 device = (struct rt_device *)obj;
-                rt_kprintf("%-*.*s %-20s %-8d\n",
+                rt_kprintf("%-*.*s %-20s %-8d %-8d\n",
                         maxlen, RT_NAME_MAX,
                         device->parent.name,
                         (device->type <= RT_Device_Class_Unknown) ?
                         device_type_str[device->type] :
                         device_type_str[RT_Device_Class_Unknown],
-                        device->ref_count);
+                        device->ref_count,
+                        device->device_id);
 
             }
         }

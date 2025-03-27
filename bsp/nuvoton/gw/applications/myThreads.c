@@ -708,7 +708,10 @@ void serial_thread_entry(void *parameter) {
   int result;
   char ch;
   int index = (int)parameter, i = 0, j = 0;
-  log_d("%s read thread started\n", g_stConfig.serPort[index].dev_name);
+
+  struct SER_PORT *ser_port = &g_stConfig.serPorts[index];
+
+  log_d("%s read thread started\n", ser_port->dev_name);
 
   int ReadDatStAdd;  // 上位机要的读的数据起始地
   int ReadDatLenth;  // 上位机要读的数据的长度
@@ -725,17 +728,16 @@ void serial_thread_entry(void *parameter) {
   int buflen = 0;
   uint8_t calc_lrc = 0;
 
-  struct SER_PORT *port = &g_stConfig.serPort[index];
 
-  char *prBuf = port->rx_buf;
-  char *pwBuf = port->tx_buf;
+  char *prBuf = ser_port->rx_buf;
+  char *pwBuf = ser_port->tx_buf;
 
   while (1) {
 
     // rt_sem_control(&g_stConfig.serPort[index].rx_sem, RT_IPC_CMD_RESET,
     // RT_NULL);
     // rt_sem_take(&g_stConfig.serPort[index].rx_sem, RT_WAITING_FOREVER);
-    readlen = rs485_receive(port, prBuf, MAX_BUF_LENGTH, 50);
+    readlen = rs485_receive(ser_port, prBuf, MAX_BUF_LENGTH, 50);
     //
     // start = clock();
     // // 从第1个字节开始计时，超过 10ms，就终止本次读取
@@ -774,17 +776,17 @@ void serial_thread_entry(void *parameter) {
       continue;
     }
 
-    log_d("readlen:%d,%d", readlen, port->CanRecv);
+    log_d("readlen:%d,%d", readlen, ser_port->CanRecv);
     // log_d("buflen:",buflen);
 
     rt_memcpy(ser_msg.data_ptr, prBuf, readlen);
     // ser_msg.data_ptr = prBuf;
     ser_msg.data_size = readlen;
-    ser_msg.port = port;
+    ser_msg.port = ser_port;
 
     if (index >= 1) {
       *(prBuf + readlen) = '\0';
-      log_d("ASCII 口收到数据(%d/%d)%s", readlen, port->CanRecv, prBuf);
+      log_d("ASCII 口收到数据(%d/%d)%s", readlen, ser_port->CanRecv, prBuf);
 
       // rt_ringbuffer_put(rb, prBuf, buflen);
 
@@ -840,6 +842,6 @@ void serial_thread_entry(void *parameter) {
     }
     // 不需要清理，直接覆盖即可
     // memset(port->rx_buf, 0, MAX_BUF_LENGTH);
-    port->CanRecv = MAX_BUF_LENGTH;
+    ser_port->CanRecv = MAX_BUF_LENGTH;
   }
 }

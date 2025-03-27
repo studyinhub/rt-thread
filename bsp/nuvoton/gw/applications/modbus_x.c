@@ -13,8 +13,8 @@
 #include <stdint.h>
 
 #define LOG_TAG "modbusx"
-// #define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
-#define LOG_LVL LOG_LVL_ERROR // LOG_LVL_DBG LOG_LVL_ERROR
+#define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
+// #define LOG_LVL LOG_LVL_ERROR
 #include <ulog.h>
 
 int RAddLimitMax = 255; // 允许读寻址的最大值
@@ -48,7 +48,7 @@ uint8_t ctx_read_buf[SCAN_READ_BYTES]; // AGILE_MODBUS_MAX_ADU_LENGTH
 
 //     pwBuf = rt_malloc(24);
 //     rt_memset(pwBuf, '\0', 24);
-//     struct SER_PORT *port = &g_stConfig.serPort[0];
+//     struct SER_PORT *port = &g_stConfig.serPorts[0];
 
 //     *pwBuf = slaveAddr;
 //     i += 1;
@@ -172,7 +172,7 @@ uint8_t ctx_read_buf[SCAN_READ_BYTES]; // AGILE_MODBUS_MAX_ADU_LENGTH
 //     //     rt_kprintf("%c", *(pwBuf + i));
 //     // }
 
-//     // struct SER_PORT *port = &g_stConfig.serPort[1];
+//     // struct SER_PORT *port = &g_stConfig.serPorts[1];
 //     // log_d("port:%s", port->dev_name);
 //     // rt_device_write(port->device, 0, pwBuf, frame_len);
 //     // free(pwBuf);
@@ -534,7 +534,7 @@ int rs485_send(struct SER_PORT *port, uint8_t *buf, int len) {
   rt_device_t dev = port->device;
   // log_d("rs485_send:%s",port->dev_name);
 
-  // struct SER_PORT *port = &g_stConfig.serPort[0];
+  // struct SER_PORT *port = &g_stConfig.serPorts[0];
   // rt_device_write(port->device, 0, buf, len);
   // ulog_hexdump("rs485_send", 16, buf, len);
   rt_sem_take(&port->lock_sem, RT_WAITING_FOREVER);
@@ -598,7 +598,7 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
 rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
                            uint16_t wrRegQuantity, uint16_t *buf) {
   uint16_t snd_len = 0, rcv_len = 0, rc = 0;
-  struct SER_PORT *port = &g_stConfig.serPort[0];
+  struct SER_PORT *port = &g_stConfig.serPorts[0];
 
   uint8_t retry_times = 3;
 
@@ -622,7 +622,7 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
       break;
     } else {
       log_w("rs485_receive error(%d)", rcv_len);
-      log_d("retry:%d \r\n", retry);
+      log_d("retry:%d \r\n", retry_times);
     }
 
   } while (retry_times--);
@@ -639,8 +639,8 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
   uint16_t snd_len = 0, rcv_len = 0, rc = 0;
   // uint8_t temp[SCAN_READ_BYTES];
 
-  struct SER_PORT *port = &g_stConfig.serPort[0];
-  // rt_device_t dev = g_stConfig.serPort[0].device;
+  struct SER_PORT *port = &g_stConfig.serPorts[0];
+  // rt_device_t dev = g_stConfig.serPorts[0].device;
 
   snd_len = agile_modbus_serialize_read_registers(ctx, rdHead, rdQuantity);
   // log_d("send_len:%d", snd_len);
@@ -656,7 +656,7 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
   rs485_send(port, ctx->send_buf, snd_len);
 
   // 读取数据,500 ms 内读完
-  // 帧间隔:g_stConfig.serPort[0].frameInterval
+  // 帧间隔:g_stConfig.serPorts[0].frameInterval
 
   rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 500);
 
@@ -688,9 +688,9 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
   return RT_EOK;
 }
 
-rt_err_t rs232_send_asc() { rt_device_t dev = g_stConfig.serPort[1].device; }
+rt_err_t rs232_send_asc() { rt_device_t dev = g_stConfig.serPorts[1].device; }
 
-rt_err_t rs485_send_asc() { rt_device_t dev = g_stConfig.serPort[2].device; }
+rt_err_t rs485_send_asc() { rt_device_t dev = g_stConfig.serPorts[2].device; }
 
 void rtu_master_init(void) {
   // 13*16 - 3 =  208
@@ -722,7 +722,7 @@ static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size) {
   if (size > 0) {
     for (int i = 0; i < SER_PORTS_CNT; i++) {
 
-      port = &g_stConfig.serPort[i];
+      port = &g_stConfig.serPorts[i];
 
       if (!rt_strcmp((char *)port->dev_name, dev->parent.name)) {
 
@@ -776,91 +776,90 @@ int init_ser_ports() {
   // g_stConfig.scanRegCnt = tempObj->valueint;
   for (int i = 0; i < iArrayCnt; i++) {
 
-    struct SER_PORT *ser_port = &g_stConfig.serPort[i];
+    struct SER_PORT *ser_port = &g_stConfig.serPorts[i];
 
     // 先赋值为默认值
     ser_port->config = temp_config;
 
     port = cJSON_GetArrayItem(ports, i);
     tempObj = cJSON_GetObjectItem(port, "name");
-    log_d("default:g_stConfig.serPort[%d].dev_name %s", i,
-          g_stConfig.serPort[i].dev_name);
+    log_d("default:g_stConfig.serPorts[%d].dev_name %s", i,
+          ser_port->dev_name);
     log_d("---get name:%s type:%d value:%s", tempObj->string, tempObj->type,
           tempObj->valuestring);
 
     rt_memset(ser_port->dev_name, '\0', 6);
     rt_strncpy(ser_port->dev_name, tempObj->valuestring,
                rt_strlen(tempObj->valuestring));
-    log_d("new:g_stConfig.serPort[%d].dev_name %s", i, ser_port->dev_name);
+    log_d("new:g_stConfig.serPorts[%d].dev_name %s", i, ser_port->dev_name);
 
     // 设置波特率
     tempObj = cJSON_GetObjectItem(port, "baudrate");
-    log_d("default:g_stConfig.serPort[%d].config.baud_rate %d", i,
+    log_d("default:g_stConfig.serPorts[%d].config.baud_rate %d", i,
           ser_port->config.baud_rate);
     log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type,
           tempObj->valueint);
-    g_stConfig.serPort[i].config.baud_rate = tempObj->valueint;
-    log_d("new:g_stConfig.serPort[%d].config.baud_rate %d", i,
+    ser_port->config.baud_rate = tempObj->valueint;
+    log_d("new:g_stConfig.serPorts[%d].config.baud_rate %d", i,
           ser_port->config.baud_rate);
 
     // 依据波特率，设置帧间隔
-    // g_stConfig.serPort[i].frameInterval = 10000 /
-    // g_stConfig.serPort[i].config.baud_rate + 2 + 2;
+    // g_stConfig.serPorts[i].frameInterval = 10000 /
+    // g_stConfig.serPorts[i].config.baud_rate + 2 + 2;
     ser_port->frameInterval = 10;
-    log_d("new:g_stConfig.serPort[%d].frameInterval %d", i,
+    log_d("new:g_stConfig.serPorts[%d].frameInterval %d", i,
           ser_port->frameInterval);
 
     // 设置数据位
     tempObj = cJSON_GetObjectItem(port, "databits");
-    log_d("default:g_stConfig.serPort[%d].config.data_bits %d", i,
+    log_d("default:g_stConfig.serPorts[%d].config.data_bits %d", i,
           ser_port->config.data_bits);
     log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type,
           tempObj->valueint);
-    g_stConfig.serPort[i].config.data_bits = tempObj->valueint;
-    log_d("new:g_stConfig.serPort[%d].config.data_bits %d", i,
+    g_stConfig.serPorts[i].config.data_bits = tempObj->valueint;
+    log_d("new:g_stConfig.serPorts[%d].config.data_bits %d", i,
           ser_port->config.data_bits);
 
     // 设置停止位
     tempObj = cJSON_GetObjectItem(port, "stopbits");
-    log_d("default:g_stConfig.serPort[%d].config.stop_bits %d", i,
+    log_d("default:g_stConfig.serPorts[%d].config.stop_bits %d", i,
           ser_port->config.stop_bits);
     log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type,
           tempObj->valueint);
-    g_stConfig.serPort[i].config.stop_bits = tempObj->valueint;
-    log_d("new:g_stConfig.serPort[%d].config.stop_bits %d", i,
+    ser_port->config.stop_bits = tempObj->valueint;
+    log_d("new:g_stConfig.serPorts[%d].config.stop_bits %d", i,
           ser_port->config.stop_bits);
 
     // 设置奇偶校验
     tempObj = cJSON_GetObjectItem(port, "parity");
-    log_d("default:g_stConfig.serPort[%d].config.parity %d", i,
+    log_d("default:g_stConfig.serPorts[%d].config.parity %d", i,
           ser_port->config.parity);
     log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type,
           tempObj->valueint);
-    g_stConfig.serPort[i].config.parity = tempObj->valueint;
-    log_d("new:g_stConfig.serPort[%d].config.parity %d", i,
+    ser_port->config.parity = tempObj->valueint;
+    log_d("new:g_stConfig.serPorts[%d].config.parity %d", i,
           ser_port->config.parity);
 
     // 设置 bufsz
     tempObj = cJSON_GetObjectItem(port, "bufsz");
-    log_d("default:g_stConfig.serPort[%d].config.bufsz %d", i,
+    log_d("default:g_stConfig.serPorts[%d].config.bufsz %d", i,
           ser_port->config.bufsz);
     log_d("---get name:%s type:%d value:%d", tempObj->string, tempObj->type,
           tempObj->valueint);
-    g_stConfig.serPort[i].config.bufsz = tempObj->valueint;
-    log_d("new:g_stConfig.serPort[%d].config.bufsz %d", i,
+    ser_port->config.bufsz = tempObj->valueint;
+    log_d("new:g_stConfig.serPorts[%d].config.bufsz %d", i,
           ser_port->config.bufsz);
 
-    rt_kprintf("dev_name:%s\n", g_stConfig.serPort[i].dev_name);
-    // rt_strncpy(uart_name, g_stConfig.serPort[i].dev_name, RT_NAME_MAX);
+    rt_kprintf("dev_name:%s\n", ser_port->dev_name);
 
-    ser_port->device = rt_device_find(g_stConfig.serPort[i].dev_name);
+    ser_port->device = rt_device_find(ser_port->dev_name);
 
     if (ser_port->device == NULL) {
       rt_kprintf("Can't find %s.\n", ser_port->dev_name);
       return RT_ERROR;
       // goto exit;
     }
-    rt_kprintf("Find %s.\n", ser_port->dev_name);
+    log_d("Find %s device_id:%d", ser_port->dev_name,ser_port->device->device_id);
 
     // https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart
 
@@ -878,7 +877,7 @@ int init_ser_ports() {
     rt_device_set_tx_complete(ser_port->device, uart_tx_com);
 
     /* 没有作用，驱动不支持*/
-    // rt_device_control(g_stConfig.serPort[i].device,
+    // rt_device_control(ser_port->device,
     // RT_DEVICE_CTRL_SET_INT,RT_DEVICE_FLAG_INT_TX);
 
     /* 初始化信号量 */
@@ -892,7 +891,7 @@ int init_ser_ports() {
     ret = rt_device_open(ser_port->device, RT_DEVICE_FLAG_INT_RX);
     RT_ASSERT(ret == RT_EOK);
 
-    memset(g_stConfig.serPort[i].rx_buf, 0, MAX_BUF_LENGTH);
+    memset(ser_port->rx_buf, 0, MAX_BUF_LENGTH);
     ser_port->CanRecv = MAX_BUF_LENGTH;
     char thread_name[10] = {'\0'};
 
@@ -902,6 +901,7 @@ int init_ser_ports() {
     if (i == 0)
       continue;
     /* 创建 serial 线程 */
+
 
     rt_thread_t thread = rt_thread_create(
         thread_name, (void (*)(void *parameter))serial_thread_entry, (void *)i,
