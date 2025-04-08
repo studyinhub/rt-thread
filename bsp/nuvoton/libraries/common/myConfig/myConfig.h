@@ -12,7 +12,6 @@
 
 #include "tftp.h"
 
-#define WEBNET_INRAM
 
 #define MAX_BUF_LENGTH 1024
 
@@ -44,6 +43,17 @@ struct SER_PORT {
   char tx_buf[MAX_BUF_LENGTH]; // 发送 buf
 };
 
+struct CHCT_FRAME_META {
+  uint8_t sof;// start of frame 
+  char slaveAddr[5]; // address of slave "0101" 
+  char waittime; // "A"
+  char function[4]; // "WRD"
+  uint16_t head; // "D05000"
+  uint8_t quantity; // "13"
+  int16_t wrData; // 00C8
+  uint8_t eof[2]; // Not EOF "0x03 0x0D"
+};
+
 struct ASC_FRAME_META {
   uint8_t slaveAddr;
   uint8_t function;
@@ -63,6 +73,7 @@ struct SER_MSG {
   rt_uint32_t data_size; /* 数据块大小   */
   rt_uint32_t res_size;
   struct ASC_FRAME_META meta;
+  struct CHCT_FRAME_META meta1;
   struct SER_PORT *port; /*来自端口，或者说这条消息要返回给那个 ascii 端口*/
 };
 #pragma pack()
@@ -86,7 +97,8 @@ struct ASC_SYS {
 };
 
 struct CONFIG {
-  uint16_t mapEnable;
+  uint8_t mapEnable;
+  uint8_t transType; // 0:ascii 1:CHCT6302
   struct SER_PORT serPorts[3];
   struct RTU_SYS rtuSys;
   struct ASC_SYS ascSys[3];
@@ -98,6 +110,7 @@ extern ebled_t led_wrk;
 extern char g_BUF_CONFIG_JSON[MAX_CONFIG_JSON_SIZE];
 
 extern cJSON *g_root;
+
 extern struct tftp_server *tftp_server;
 
 extern struct CONFIG g_stConfig;

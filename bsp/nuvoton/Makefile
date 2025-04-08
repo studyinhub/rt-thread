@@ -19,26 +19,28 @@ all: auto_version
 test1: 
 	@echo "hello" $(pack_file)
 
-ram: reset
-	scons -j 8 
+
+
+ram:reset 
+	BUILD=debug scons -j 8
 	# nuwriter ${RAM_INI}
-	nutool ram
+	nutool -o rtthread -a write -p ram
+
+flash: 
+	BUILD=release scons -j 8
+	-nutool kernel erase 
 
 reset:
 	# 加上 - 表示连接超时继续
 	- curl --connect-timeout 1 -m 2 http://$(ip)/cgi-bin/reset
 
-build:
-	scons -j 8
-
 erase: 
 	@echo "erase whole chip"
-	-nutool whole erase 
+	-nutool -o rtthread -a erase -p kernel
 
 bpack:
 	# -nutool bpack
 	${NUWRITER} ${BURN_PACK_INI}
-
 
 nand:reset
 	${NUWRITER} ${NAND_INI}
@@ -65,7 +67,7 @@ image:
 
 gpack:
 	# nuwriter $(GEN_PACK_INI)
-	-nutool gpack
+	-nutool -o rtthread -a pack
 	echo "重命名" $(dateSuffix)
 	@mv -f ./rtthread_pack.bin ./$(pack_file)
 

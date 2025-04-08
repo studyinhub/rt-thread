@@ -13,8 +13,8 @@
 #include <stdint.h>
 
 #define LOG_TAG "modbusx"
-#define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
-// #define LOG_LVL LOG_LVL_ERROR
+// #define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
+#define LOG_LVL LOG_LVL_ERROR
 #include <ulog.h>
 
 int RAddLimitMax = 255; // 允许读寻址的最大值
@@ -257,6 +257,87 @@ void print_asc_frame_meta(struct ASC_FRAME_META *meta) {
   }
 }
 
+rt_err_t chct_build_response(struct SER_MSG *ser_msg) {
+
+  struct CHCT_FRAME_META *meta = &ser_msg->meta1;
+  char *pwBuf = ser_msg->res_ptr;
+  char *prBuf = ser_msg->data_ptr;
+
+  uint8_t errCode = 0;
+  rt_err_t ret = RT_EOK;
+  int16_t offset = 0 ;
+  
+  *pwBuf = 0x02;
+  rt_strncpy(pwBuf +1,meta->slaveAddr,4);
+  rt_strncpy(pwBuf +5,"OK",2);
+  
+  // uint32_t host_value = 0x12345678;  // 主机字节序
+  // uint32_t net_value;
+  // // 将主机字节序转换为网络字节序
+  // net_value = htonl(host_value);
+  // printf("Host order: 0x%X\n", host_value);
+  // printf("Network order: 0x%X\n", net_value);
+  //
+  
+  ser_msg->res_size = 9;
+  log_d("function:%s",meta->function);
+  if(rt_strcmp(meta->function,"WRD") ==0)
+  {
+
+    ser_msg->res_size = 9+meta->quantity*4;
+    if(LOG_LVL == LOG_LVL_DBG)
+    ulog_hexdump("hold0~8",16,(uint8_t*)g_stConfig.rtuSys.hold,16);
+    for(uint8_t i = 0 ;i< meta->quantity;i++)
+    {
+        // rt_int32_t *bytes= (rt_int32_t *)(pwBuf+7);
+      // rt_memcpy(bytes,g_stConfig.rtuSys.hold+2*(meta->rdHead+offset+i),4);
+      uint8_t bytes[4];
+      int16_t reg = *(int16_t *)(g_stConfig.rtuSys.hold + meta->head +offset+i);
+      log_d("Hi(%d):%02x",i,reg);
+
+       
+      uint16_t isMinus = (reg & 0x00008000)>>15;
+      uint16_t positive = (reg & 0x00007FFF)-1;
+
+      if(isMinus)
+      {
+        reg = ~positive & 0x8FFF;
+
+        log_d("isMinus:%d,positive;%d,%02X,%X",isMinus,positive,positive,reg);
+      }
+
+      bytes[0] =  0;
+      bytes[1] =  0;
+      // bytes[2] =  reg & 0xF0;
+      // bytes[3] =  reg & 0x0F;
+      bytes[2] = (uint8_t)(reg>>8 & 0xFF);
+      bytes[3] = (uint8_t)(reg & 0x00FF);
+
+      rt_memcpy(pwBuf+7+i*4,bytes,4);
+      // if(i==0)
+      // {
+      //   rt_int32_t temp= 0;
+      //   temp |= bytes[0] << 24; // 最高字节
+      //   temp |= bytes[1] << 16;
+      //   temp |= bytes[2] << 8;
+      //   temp |= bytes[3]; // 最低字节
+      //   log_d("Temperature Set Point:%08x",temp);
+      // }
+    }
+  }
+
+  *(pwBuf+ser_msg->res_size -2) = 0x03;
+  *(pwBuf+ser_msg->res_size-1) = 0x0D;
+  
+  log_d("2------------len:%d", ser_msg->res_size);
+  if(LOG_LVL == LOG_LVL_DBG)
+    ulog_hexdump("chct pwbuf",16,pwBuf,ser_msg->res_size);
+
+  return RT_EOK;
+
+}
+
+
 rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
 
   uint16_t bytesCnt = 0, bufLen = 0;
@@ -315,6 +396,9 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
       return RT_ENOSYS;
     }
     break;
+  default:
+    log_e("Unknow D95 value");
+    return RT_ERROR;
   }
 
   ser_msg->res_size = 11;
@@ -365,6 +449,7 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
       if (meta->rdHead >= 256) {
         offset -= 256;
       }
+
       log_d("2rdHead:%d offset:%d", meta->rdHead, offset);
     }
 
@@ -409,113 +494,269 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   return RT_EOK;
 }
 
-rt_err_t ascii_parse_request(struct SER_MSG *ser_msg) {
-  char *ptrFrame = ser_msg->data_ptr;
-  rt_uint32_t frame_len = ser_msg->data_size;
-  struct ASC_FRAME_META *meta = &ser_msg->meta;
+struct frame {
+  int frame_start;
+  int frame_end;
+};
 
-  log_i("pwBuf:%d pResBuf:%d", ptrFrame, ser_msg->res_ptr);
 
-  rt_uint32_t i = 0, j = 0;
 
-  meta->slaveAddr = 0;
-  meta->function = 0;
+rt_err_t find_frame(char *buf,rt_uint32_t len,uint8_t sof,uint8_t *eof,struct frame *arr)
+{
+  char *ch = buf;
+  rt_uint32_t i=0,j=0;
+  log_d("find frame sof:%02x,eof0:%02x,eof1:%02x",sof,eof[0],eof[1]);
 
-  memset(meta, 0, sizeof(struct ASC_FRAME_META));
-
-  struct frame {
-    int frame_start;
-    int frame_end;
-  };
-
-  struct frame arr[3] = {{-1, -1}};
-
-  char *ch = ptrFrame;
-
+  
   // do {
   //   rt_kprintf("%c ",*(ch+i));
   //   i++;
   // }while(frame_len--);
   //
+  for(i=0,j=0;i<len;i++)
+  {
+     ch = buf +i;
 
-  for (i = 0, j = 0; i < frame_len; i++) {
-    ch = ptrFrame + i;
-    // 查找帧头
-    if (*ch == ':' && arr[j].frame_start == -1) {
+     if(*ch == sof && arr[j].frame_start ==-1)
+    {
       arr[j].frame_start = i;
       continue;
     }
 
-    if (*ch == 0x0D) {
-      if (*(ch + 1) == 0x0A && arr[j].frame_start != -1 &&
-          arr[j].frame_end == -1) {
-        arr[j].frame_end = i + 1;
-        *(ptrFrame + arr[j].frame_end) = '\0';
-        j++;
-        // find one
-        if (j >= 3)
-          break;
-      } else {
+    if(*ch == eof[0])
+    {
+       if(*(ch+1) == eof[1] && arr[j].frame_start != -1 && arr[j].frame_end == -1)
+      {
+        arr[j].frame_end = i +1;
+        *(buf+arr[j].frame_end) = '\0';
+        j++;//find one
+        if(j>=3) break;
+      }else {
         continue;
       }
     }
   }
 
-  if (j <= 0) {
-    log_e("未找到帧头%d %d", i, frame_len);
+  if(j <=0)
+  {
+    log_w("Not found %c...%d%d frame",sof,eof[0],eof[1]);
+    return -RT_ERROR;
+  }
+  log_d("find %d valid frame", j);
+  return j;
+}
+
+
+rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
+  char *ptrFrame = ser_msg->data_ptr;
+  rt_uint32_t frame_len = ser_msg->data_size;
+  rt_err_t ret = RT_EOK;
+
+  // meta->slaveAddr = 0;
+  // meta->function = 0;
+
+  log_i("ptrFrame:%d pResBuf:%d", ptrFrame, ser_msg->res_ptr);
+
+  rt_uint32_t i = 0, j = 0;
+ 
+  struct frame arr[3] = {{-1, -1}};
+
+  uint8_t sof=':';
+  uint8_t eof[2]={0x0D,0x0A};
+
+
+  ret = find_frame(ptrFrame,frame_len,sof,eof,arr);
+
+  struct ASC_FRAME_META *meta = &ser_msg->meta;
+  struct CHCT_FRAME_META *meta1 = &ser_msg->meta1;
+  if(ret>0)
+  {
+
+    memset(meta, 0, sizeof(struct ASC_FRAME_META));
+    for (i = 0; i < ret; i++) {
+      char *pStart = ptrFrame + arr[i].frame_start;
+      char *pEnd = ptrFrame + arr[i].frame_end;
+      log_d("frame_start:%d frame_end:%d frame len:%d", arr[i].frame_start,
+            arr[i].frame_end, arr[i].frame_end - arr[i].frame_start + 1);
+
+      meta->slaveAddr = ATOHChar(pStart + 1);
+      meta->function = ATOHChar(pStart + 3);
+
+      switch (meta->function) {
+      case 3:
+        meta->rdHead = ATOHInt(pStart + 5);
+        meta->rdQuantity = ATOHInt(pStart + 9);
+        meta->lrc = ATOHChar(pStart + 13);
+        break;
+      case 6:
+        meta->wrHead = ATOHInt(pStart + 5);
+        meta->wrRegQuantity = 1;
+        meta->wrByteQuantity = 2;
+        meta->wrBuf = pStart + 9;
+        meta->lrc = ATOHChar(pStart + 13);
+        break;
+      case 16:
+        meta->wrHead = ATOHInt(pStart + 5);
+        meta->wrRegQuantity = ATOHInt(pStart + 9);
+        meta->wrByteQuantity = ATOHInt(pStart + 13);
+        meta->wrBuf = pStart + 15;
+        meta->lrc = ATOHChar(pStart + 15 + meta->wrByteQuantity * 2);
+        break;
+      case 23:
+        meta->rdHead = ATOHInt(pStart + 5);
+        meta->rdQuantity = ATOHInt(pStart + 9);
+        meta->wrHead = ATOHInt(pStart + 13);
+        meta->wrRegQuantity = ATOHInt(pStart + 17);
+        meta->wrByteQuantity = ATOHChar(pStart + 21);
+        meta->wrBuf = (pStart + 23);
+        meta->lrc = ATOHChar(pStart + 23 + meta->wrByteQuantity * 2);
+        break;
+      defalut:
+        log_w("Unknow funcode");
+        return -RT_ERROR;
+        break;
+      }
+
+      meta->calc_lrc =
+          ASCII_LRC(ptrFrame + 1, frame_len - 5); // drop :(1) lrc(2) /r/n(2)
+      print_asc_frame_meta(meta);
+    }
+    return 1;
+  }
+
+  sof=0x02;
+  eof[0]=0x03;
+  eof[1]=0x0D;
+
+  ret = find_frame(ptrFrame,frame_len,sof,eof,arr);
+
+  
+  if(ret<0)
+  {
     return -RT_ERROR;
   }
 
-  log_d("find %d frame", j);
-  // TODO: here just handle one
-  for (i = 0; i < 1; i++) {
-    char *pStart = ptrFrame + arr[i].frame_start;
-    char *pEnd = ptrFrame + arr[i].frame_end;
-    log_d("frame_start:%d frame_end:%d frame len:%d", arr[i].frame_start,
-          arr[i].frame_end, arr[i].frame_end - arr[i].frame_start + 1);
+  if(ret>0)
+  {
+    memset(meta1,0,sizeof(struct CHCT_FRAME_META));
+    meta->wrByteQuantity = 0;
+    for(i=0;i<ret;i++){
+      char *pStart = ptrFrame + arr[i].frame_start;
+      char *pEnd = ptrFrame + arr[i].frame_end;
+      log_d("frame_start:%02x frame_end:%2x frame len:%d", arr[i].frame_start,
+            arr[i].frame_end, arr[i].frame_end - arr[i].frame_start + 1);
+      memset(meta1->slaveAddr,'\0',10);
+      rt_strncpy(meta1->slaveAddr,ptrFrame+arr[i].frame_start+1,4);
+      // uint8_t a1=*(ptrFrame+arr[i].frame_start + 1);
+      // uint8_t a2=*(ptrFrame+arr[i].frame_start + 2);
+      // uint8_t a3=*(ptrFrame+arr[i].frame_start + 3);
+      // uint8_t a4=*(ptrFrame+arr[i].frame_start + 4);
+      // meta1->slaveAddr = a1*1000+a2*100+a3*10 +a4;
+      //5
+      meta1->waittime = *(ptrFrame + arr[i].frame_start +5);
+      if(meta1->waittime != 'A')
+      {
+        log_e("Wrong waittime");
+        return -RT_ERROR;
+      }
+      // 6,7,8
+      rt_strncpy(meta1->function,ptrFrame+arr[i].frame_start+6,3);
 
-    meta->slaveAddr = ATOHChar(pStart + 1);
-    meta->function = ATOHChar(pStart + 3);
+      // drop 9,10,11,12 for 'D050' 
+      char str_head[3]={'\0'};
+      char *end_ptr = NULL;               // 用于检查转换是否成功
+      rt_strncpy(str_head,ptrFrame+arr[i].frame_start+13,2);
+      meta1->head= (int16_t)strtol(str_head,&end_ptr,10);
+      if (*end_ptr != '\0') {
+          log_e("head 转换失败：字符串包含无效字符\n");
+          return -RT_ERROR;
+      }
 
-    switch (meta->function) {
-    case 3:
-      meta->rdHead = ATOHInt(pStart + 5);
-      meta->rdQuantity = ATOHInt(pStart + 9);
-      meta->lrc = ATOHChar(pStart + 13);
-      break;
-    case 6:
-      meta->wrHead = ATOHInt(pStart + 5);
-      meta->wrRegQuantity = 1;
-      meta->wrByteQuantity = 2;
-      meta->wrBuf = pStart + 9;
-      meta->lrc = ATOHChar(pStart + 13);
-      break;
-    case 16:
-      meta->wrHead = ATOHInt(pStart + 5);
-      meta->wrRegQuantity = ATOHInt(pStart + 9);
-      meta->wrByteQuantity = ATOHInt(pStart + 13);
-      meta->wrBuf = pStart + 15;
-      meta->lrc = ATOHChar(pStart + 15 + meta->wrByteQuantity * 2);
-      break;
-    case 23:
-      meta->rdHead = ATOHInt(pStart + 5);
-      meta->rdQuantity = ATOHInt(pStart + 9);
-      meta->wrHead = ATOHInt(pStart + 13);
-      meta->wrRegQuantity = ATOHInt(pStart + 17);
-      meta->wrByteQuantity = ATOHChar(pStart + 21);
-      meta->wrBuf = (pStart + 23);
-      meta->lrc = ATOHChar(pStart + 23 + meta->wrByteQuantity * 2);
-      break;
-    defalut:
-      log_w("Unknow funcode");
-      return -RT_ERROR;
-      break;
+      // uint8_t a2=*(ptrFrame+arr[i].frame_start + 13);
+      // uint8_t a3=*(ptrFrame+arr[i].frame_start + 14);
+      // meta1->head= a1*100+a2*10 +a3;
+      if(*(ptrFrame+arr[i].frame_start+15) != ',')
+      {
+        log_e(", is not right");
+        // continue;
+        return -RT_ERROR;
+      }
+
+      // 15 ,
+      // 16,17
+      // a1=*(ptrFrame+arr[i].frame_start + 16);
+      // a2=*(ptrFrame+arr[i].frame_start + 17);
+      // meta1->quantity= a1 *10 + a2;
+
+      char str_quantity[3]={'\0'};
+      end_ptr = NULL;
+      rt_strncpy(str_quantity,ptrFrame+arr[i].frame_start+16,2);
+      meta1->quantity = (int16_t)strtol(str_quantity,&end_ptr,10);
+      if (*end_ptr != '\0') {
+          log_e("quantity 转换失败：字符串包含无效字符\n");
+          return -RT_ERROR;
+      }
+
+      if(meta1->quantity<=0) return -RT_ERROR;
+
+      if(rt_strcmp(meta1->function,"WRD")==0)
+      {
+
+      }else if(rt_strcmp(meta1->function,"WWR") == 0)
+      {
+        if(*(ptrFrame+arr[i].frame_start+18) != ',')
+        {
+
+         log_e("18 , is not right");
+          // continue;
+          return -RT_ERROR;
+        }
+        char strData[5]={'\0'};
+        rt_strncpy(strData,ptrFrame+arr[i].frame_start+19,4);
+
+        end_ptr = NULL;
+        int32_t i32Data = (int32_t) strtol(strData, &end_ptr, 16);
+        // 检查转换是否成功
+        if (*end_ptr != '\0') {
+            printf("wrData 转换失败：字符串包含无效字符\n");
+            return -RT_ERROR;
+        }
+ 
+        log_d("i32Data: 0x%4X", (int16_t)i32Data);
+        uint16_t isMinus = (i32Data & 0x00008000)>>15;
+
+
+        int16_t positive = i32Data & 0x00007FFF;
+        log_d("isMinus:%d,positive;%d",isMinus,positive);
+
+        if(isMinus)
+        {
+          meta1->wrData = ~positive + 1;
+        }else{
+          meta1->wrData = (int16_t)(i32Data&0x0000FFFF);
+        }
+
+        // printf("转换后的整数值: %d\n", meta1->wrData);
+        // printf("十六进制表示: 0x%X\n", meta1->wrData);
+
+      }else{
+        log_e("Unknow function code");
+        return -RT_ERROR;
+        // continue;
+      }
+
+      log_d("slaveAddr:%s",meta1->slaveAddr);
+      log_d("waittime:%c",meta1->waittime);
+      log_d("function:%s",meta1->function);
+      log_d("rdHead:%d",meta1->head);
+      log_d("rdQuantity:%d",meta1->quantity);
+      log_d("wrData:%d",meta1->wrData);
     }
 
-    meta->calc_lrc =
-        ASCII_LRC(ptrFrame + 1, frame_len - 5); // drop :(1) lrc(2) /r/n(2)
-    print_asc_frame_meta(meta);
+    return 2;
   }
+
+  // TODO: here just handle one
 
   // if (asc_slaveAddr != g_stConfig.ascAddr)
   // {
@@ -523,13 +764,18 @@ rt_err_t ascii_parse_request(struct SER_MSG *ser_msg) {
   //     break;
   // }
 
-  return RT_EOK;
 }
 
 int rs485_send(struct SER_PORT *port, uint8_t *buf, int len) {
   rt_size_t write_len = 0;
-  RT_ASSERT(port != RT_NULL);
-  RT_ASSERT(len > 0);
+  // RT_ASSERT(port != RT_NULL);
+  // RT_ASSERT(len > 0);
+
+  if(len<=0) 
+  {
+    log_w("no data"); 
+    return 0;
+  }
 
   rt_device_t dev = port->device;
   // log_d("rs485_send:%s",port->dev_name);

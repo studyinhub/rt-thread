@@ -109,15 +109,17 @@ static void thread_rtu_master_entry(void *parameter) {
 
     // if msg queue empty then go await
     if (!rtu_send_mq.entry) {
-
+      
       rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
                                       g_stConfig.rtuSys.scanRegCnt,
                                       g_stConfig.rtuSys.hold);
 
-      rt_thread_delay(100);
+      rt_thread_delay(g_stConfig.rtuSys.scanInv);
       continue;
     }
 
+
+    // need to write 
     // rt_memset(g_ctx->read_buf, 0, g_ctx->read_bufsz);
     ret = rt_mq_recv(&rtu_send_mq, &ser_msg, sizeof(struct SER_MSG), 100);
 
@@ -140,34 +142,59 @@ static void thread_rtu_master_entry(void *parameter) {
     // log_d("write to rtu %02X",*(ser_msg.meta.wrBuf));
     // ulog_hexdump("wrbuf",16,ser_msg.meta.wrBuf,ser_msg.meta.wrByteQuantity*2);
 
-    if (!ser_msg.meta.wrRegQuantity || ser_msg.meta.function == 3) {
-      continue;
-    }
+   
+    int16_t offset;
+    if(ser_msg.meta.wrByteQuantity>0 && ser_msg.meta.function != 3)
+    {
+      log_i("wrData for ascii:%d",ser_msg.meta.wrByteQuantity);
+      rt_memset(rtu_wr_buf,0,sizeof(rtu_wr_buf));
+      for (int i = 0; i < ser_msg.meta.wrRegQuantity; i++) {
+        rtu_wr_buf[i] = ATOHInt(ser_msg.meta.wrBuf + 4 * i);
+        log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
+      }
 
-    for (int i = 0; i < ser_msg.meta.wrRegQuantity; i++) {
-      rtu_wr_buf[i] = ATOHInt(ser_msg.meta.wrBuf + 4 * i);
-      log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
-    }
-
-    print_asc_frame_meta(&ser_msg.meta);
-    int16_t offset = g_stConfig.ascSys[ser_msg.meta.slaveAddr - 1].offset;
-
-    if (g_stConfig.mapEnable) {
-
+      // print_asc_frame_meta(&ser_msg.meta);
       offset = g_stConfig.ascSys[ser_msg.meta.slaveAddr - 1].offset;
 
-      if (ser_msg.meta.wrHead >= 256) {
-        offset -= 256;
+      if (g_stConfig.mapEnable) {
+
+        offset = g_stConfig.ascSys[ser_msg.meta.slaveAddr - 1].offset;
+
+        if (ser_msg.meta.wrHead >= 256) {
+          offset -= 256;
+        }
+        log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
+              ser_msg.meta.wrHead + offset);
       }
-      log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
-            ser_msg.meta.wrHead + offset);
+      //
+      ret = modbus_write_regs(g_ctx, ser_msg.meta.wrHead + offset,
+                              ser_msg.meta.wrRegQuantity, rtu_wr_buf);
+      if (ret != RT_EOK) {
+        log_e("modbus_write_regs error");
+      }else{
+      }
+      ser_msg.meta.wrByteQuantity = 0;
     }
-    //
-    ret = modbus_write_regs(g_ctx, ser_msg.meta.wrHead + offset,
-                            ser_msg.meta.wrRegQuantity, rtu_wr_buf);
-    if (ret != RT_EOK) {
-      log_e("modbus_write_regs error");
+    else if(rt_strcmp(ser_msg.meta1.function,"WWR") == 0 )
+    {
+      log_i("wrData for chct:%d",ser_msg.meta1.wrData);
+      offset = 0;
+      rt_memset(rtu_wr_buf,0,sizeof(rtu_wr_buf));
+      // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
+      //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
+      //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
+      // }
+      
+
+      ret = modbus_write_regs(g_ctx, ser_msg.meta1.head+ offset,
+                              ser_msg.meta1.quantity, &ser_msg.meta1.wrData);
+      if (ret != RT_EOK) {
+        log_e("modbus_write_regs error");
+      }else{
+      }
+      rt_memset(ser_msg.meta1.function,'\0',4);
     }
+
 
     // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
 
@@ -244,7 +271,7 @@ static void thread_asc_entry(void *parameter) {
   ser_msg.data_ptr = rt_malloc(27 * 100);
   ser_msg.res_ptr = rt_malloc(27 * 100);
 
-  log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
+  log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
 
   if (ser_msg.data_ptr == RT_NULL || ser_msg.res_ptr == RT_NULL) {
     log_e("core mem malloc faild");
@@ -267,7 +294,7 @@ static void thread_asc_entry(void *parameter) {
     log_d("asc_recv_mq.entry:%d/%d size:%d", asc_recv_mq.entry,
           asc_recv_mq.max_msgs, asc_recv_mq.msg_size);
 
-    log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
+    log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
 
     ret = rt_mq_recv(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG),
                      RT_WAITING_FOREVER);
@@ -318,15 +345,20 @@ static void thread_asc_entry(void *parameter) {
 
     log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
     // start = clock();
-    ret = ascii_parse_request(&ser_msg);
+    //
+    ret = parse_serial_frame(&ser_msg);
     // end = clock();
     // log_d("解析完毕,用时:%dms", end - start);
-    if (ret != RT_EOK) {
-      log_e("ascii_parse_request error,no send");
+    if (ret != 1 && ret != 2) {
+      log_e("parse error,no send");
       continue;
     }
 
-    ret = ascii_build_response(&ser_msg);
+    if(ret == 1)
+      ret = ascii_build_response(&ser_msg);
+    else{
+      ret = chct_build_response(&ser_msg);
+    }
 
     // print_asc_frame_meta(&ser_msg.meta);
 

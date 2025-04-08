@@ -22,8 +22,10 @@ elif CROSS_TOOL == "keil":
 if os.getenv("RTT_EXEC_PATH"):
     EXEC_PATH = os.getenv("RTT_EXEC_PATH")
 
-# BUILD = "debug"
-BUILD = "release"
+print("arch:", ARCH)
+print("BUILD:", os.getenv("BUILD"))
+
+BUILD = os.getenv("BUILD")
 
 CORE = "arm926ej-s"
 MAP_FILE = "rtthread_nuc980.map"
@@ -89,4 +91,3 @@ elif PLATFORM == "armcc":
 
     POST_ACTION = "fromelf --bin $TARGET --output " + TARGET_NAME + " \n"
     POST_ACTION += "fromelf -z $TARGET\n"
-

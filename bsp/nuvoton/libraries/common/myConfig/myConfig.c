@@ -4,7 +4,7 @@
 #include "myWebnet.h"
 
 #define LOG_TAG "myConfig"
-#define LOG_LVL LOG_LVL_INFO
+#define LOG_LVL LOG_LVL_DBG
 #include <ulog.h>
 
 char g_FmtTimeStr[50];
@@ -40,11 +40,13 @@ void printJSON(cJSON *root) // 以递归的方式打印json的最内层键值对
 cJSON *g_root = NULL;
 
 // 具体参考 webnet/config.json
+//
 
 int baud_arr[7] = {2400, 4800, 9600, 19200, 38400, 57600, 115200};
 // RT_SERIAL_CONFIG_DEFAULT BAUD_RATE_115200
 struct CONFIG g_stConfig = {
     .mapEnable = 1,
+    .transType= 1, //0:ascii 1: CHCT 
     .rtuSys =
         {
             .scanEnable = 1,
@@ -81,7 +83,8 @@ struct CONFIG g_stConfig = {
          .regAddr = 0,
          .cnt = 40,
          .offset = 60}, // ASCII 0x100 -> 60
-    }};
+    }
+};
 
 
 // 将结构体转换 JSON 序列化
@@ -201,10 +204,10 @@ int load_config() {
   // 如果有就以存储中的文件配置做为配置
   // 否则就用自动构建的配置，并保存到存储中
 
-#ifndef WEBNET_INRAM
-  rt_sprintf(WEB_ROOT, "%s", "/mnt/filesystem/webnet");
-#else
+#ifdef WEBNET_INRAM
   rt_sprintf(WEB_ROOT, "%s", "/webnet");
+#else
+  rt_sprintf(WEB_ROOT, "%s", "/mnt/filesystem/webnet");
 #endif
 
   rt_sprintf(path, "%s/config.json", WEB_ROOT);
@@ -214,7 +217,7 @@ int load_config() {
     log_w("在 FLASH 中没有找到配置文件,将采用默认配置文件");
     build_config_factory_json();
     // 保存配置文件，下次重启的时候将从文件中加载
-    save_config(path, g_root);
+    // save_config(path, g_root);
     config_from = 1;
   } else {
     // 如果存储中已经有了 config.json,那么就读取
