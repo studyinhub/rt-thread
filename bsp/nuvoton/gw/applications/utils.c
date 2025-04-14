@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #define LOG_TAG "utils"
+// #define LOG_LVL LOG_LVL_DBG
 #define LOG_LVL LOG_LVL_ERROR
 #include <ulog.h>
 
@@ -84,6 +85,7 @@ void endian_convert_int16(int16_t *buf, size_t size)
 
 // 12=>31,32
 //  如果 endian false ,就不进行 16 进制字节顺序转换,否则需要
+//
 
 int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
 {
@@ -92,6 +94,7 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
     int i = 0, j = 0;
 
     uint8_t *tempBuf = rt_malloc(sizeof(uint8_t) * len);
+    
 
     rt_memcpy(tempBuf, pSrcHex, len);
     // for (i = 0; i < len; i++)
@@ -101,11 +104,11 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
 
     if (endian)
     {
-
         endian_convert_int16((int16_t *)tempBuf, len / 2);
     }
 
     char *buffer = rt_malloc(2 * len);
+
 
     for (i = 0; i < len; i++)
     {
@@ -113,6 +116,7 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
 
         nibble[0] = tempBuf[i] >> 4 & 0x0F;
         nibble[1] = tempBuf[i] & 0x0F;
+
         for (j = 0; j < 2; j++)
         {
             if (nibble[j] < 10)
@@ -128,6 +132,7 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
                 return 0;
             }
         }
+
         rt_memcpy(buffer + i * 2, nibble, 2);
     }
 

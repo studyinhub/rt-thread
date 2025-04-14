@@ -1,0 +1,122 @@
+分区计算：
+1 B in bit => 8 bit
+1 KB in B => 1,024 B
+
+1 MiB in KB => 1,024 KB
+1 GiB in MiB=> 1,024 MiB
+
+
+1 page = 2048 B
+1 block = 64 page
+
+
+1 page in KB => 2 KB
+1 block in KB => 128 KB
+
+1 MiB in block=> 8 block
+
+10 block in MiB => 1.25 MiB
+
+32 block in MiB => 4 MiB
+
+0x20000 B in block => block
+block
+0x80000 B in block => 4*block
+
+0x100000 B in block => 8*block
+
+0x200000 B in block => 0x10*block
+
+0x300000 B in block => 0x18*block
+
+0x340000 B in block => 0x1A*block
+
+0x1900000 B in block => 0xC8*block
+
+0x4000000 B in block => 0x200*block
+
+0x4340000 B in block => 0x21A*block
+
+0x8000000 B in block => 0x400*block
+
+0x1A in dec => 26
+
+200 in hex=> 0xC8
+
+225 in hex=> 0xE1
+
+0x400 in dec=> 1,024
+
+128 MiB in block=> 1,024 block
+
+0x4400000 B in block => 0x220*block
+
+0x220 in dec=> 544
+
+
+
+原来 
+26+200+798=> 1,024
+26 block in MiB => 3.25 MiB
+200 block in MiB=> 25 MiB
+798 block in MiB=> 99.75 MiB
+
+3.25 + 25 + 99.75=> 128
+nand0: [0x0 ,0x340000]  block [0 ~ 25] 26
+(0x340000 B - 0x0 B) in block => 0x1A*block
+
+	4 + 4 + 8 + 8 => 24
+	[0,3]: 4 block   [0,0x80000)         uboot-spl  0.5MiB
+	[4,7]: 4 block   [0x80000,0x100000)  env        0.5MiB                
+	[8,15]: 8 block  [0x100000,0x200000) uboot      1MiB
+	[16,23]: 8 block [0x200000~0x300000)  rt-thread 1MiB~1.25MiB
+   26 block in MiB=> 3.25 MiB
+nand1: [0x340000, 0x1C40000]   block [26,225]  200
+(0x1C40000 B - 0x340000 B) in block => 0xC8*block
+   200 block in MiB=> 25 MiB
+nand2: [0x1C40000, 0x8000000) block [226,1023] 798
+	(0x8000000 B - 0x1C40000 B) in block=> 0x31E*block
+	0x31E in dec=> 798
+	798 block in MiB=> 99.75 MiB
+
+新的：
+32 + 200 + 792 => 1,024
+32 block in MiB => 4 MiB
+200 block in MiB=> 25 MiB
+792 block in MiB=> 99 MiB
+4 + 25 + 99 => 128
+
+nand0:[0x0 ,0x400000]  block [0 ~ 31] 32
+(0x400000 B - 0x0 B) in block => 0x20*block
+32 block in MiB=> 4 MiB
+
+	4+ 4 +8 + 16 => 32
+	[0,3]: 4 block   [0,0x80000)         uboot-spl 0.5MiB
+	[4,7]: 4 block   [0x80000,0x100000)  env       0.5MiB                
+	[8,15]: 8 block  [0x100000,0x200000) uboot     1MiB
+	[16,31]: 16 block[0x200000~0x400000) rt-thread 2MiB
+	
+nand1:[0x400000, 0x1D00000)      block [32,231] 200
+(0x1D00000 B - 0x400000 B) in block => 0xC8*block
+
+nand2: [0x1D00000, 0x8000000) block [232,1023] 792
+
+(0x8000000 B - 0x1D00000 B) in block => 0x318*block
+0x318 in dec => 792
+
+原来的 nand0 只给分配了 26 个 block，留给 rt_thread.bin 的空间只有 8 个 Block(1 MiB)，程序变大了之后( build = debug 1.7MiB > 1.25MiB)，会越界写入到nand1 之中，程序启动后，初始化 nand1 ，会将程序擦除一部分，导致再次上电无法启动
+调整 nand0 分区，给 app 部分 2MiB 空间，不会越界写入到 nand1
+build=debug 1.7MiB
+build=release 1.1MiB 
+32 -16 +1 => 17
+
+17 block in MiB => 2.125 MiB
+
+新的 分配给了nand0 32 个 block ,rt_thread 占用 16~32 17 个 
+
+
+
+
+
+
+

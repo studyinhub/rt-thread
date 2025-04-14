@@ -287,43 +287,62 @@ rt_err_t chct_build_response(struct SER_MSG *ser_msg) {
     ser_msg->res_size = 9+meta->quantity*4;
     if(LOG_LVL == LOG_LVL_DBG)
     ulog_hexdump("hold0~8",16,(uint8_t*)g_stConfig.rtuSys.hold,16);
-    for(uint8_t i = 0 ;i< meta->quantity;i++)
-    {
-        // rt_int32_t *bytes= (rt_int32_t *)(pwBuf+7);
-      // rt_memcpy(bytes,g_stConfig.rtuSys.hold+2*(meta->rdHead+offset+i),4);
-      uint8_t bytes[4];
-      int16_t reg = *(int16_t *)(g_stConfig.rtuSys.hold + meta->head +offset+i);
-      log_d("Hi(%d):%02x",i,reg);
 
-       
-      uint16_t isMinus = (reg & 0x00008000)>>15;
-      uint16_t positive = (reg & 0x00007FFF)-1;
+    // for(uint8_t i = 0 ;i< meta->quantity;i++)
+    // {
+    //   rt_int16_t *reg = g_stConfig.rtuSys.hold + meta->head +offset+i;
+    //   log_d("Hi(%d):%04X",i,*reg);
+    //   uint16_t isMinus = (*reg & 0x8000)>>15;
+    //   uint16_t positive = (*reg & 0x7FFF)-1;
+    //   if(isMinus)
+    //   {
+    //     *reg = ~positive & 0x8FFF;
+    //     log_d("isMinus:%d,positive:%d,%02X,%X",isMinus,positive,positive,reg);
+    //   }
+    //
+    // }
+    
+    HToAChar(pwBuf + 7,
+             (uint8_t *)g_stConfig.rtuSys.hold + 2 * (meta->head+ offset),
+             meta->quantity*4, 1);
 
-      if(isMinus)
-      {
-        reg = ~positive & 0x8FFF;
-
-        log_d("isMinus:%d,positive;%d,%02X,%X",isMinus,positive,positive,reg);
-      }
-
-      bytes[0] =  0;
-      bytes[1] =  0;
-      // bytes[2] =  reg & 0xF0;
-      // bytes[3] =  reg & 0x0F;
-      bytes[2] = (uint8_t)(reg>>8 & 0xFF);
-      bytes[3] = (uint8_t)(reg & 0x00FF);
-
-      rt_memcpy(pwBuf+7+i*4,bytes,4);
-      // if(i==0)
-      // {
-      //   rt_int32_t temp= 0;
-      //   temp |= bytes[0] << 24; // 最高字节
-      //   temp |= bytes[1] << 16;
-      //   temp |= bytes[2] << 8;
-      //   temp |= bytes[3]; // 最低字节
-      //   log_d("Temperature Set Point:%08x",temp);
-      // }
-    }
+    // for(uint8_t i = 0 ;i< meta->quantity;i++)
+    // {
+    //     // rt_int32_t *bytes= (rt_int32_t *)(pwBuf+7);
+    //   // rt_memcpy(bytes,g_stConfig.rtuSys.hold+2*(meta->rdHead+offset+i),4);
+    //   uint8_t bytes[4];
+    //   int16_t reg = *(int16_t *)(g_stConfig.rtuSys.hold + meta->head +offset+i);
+    //   log_d("Hi(%d):%02x",i,reg);
+    //
+    //
+    //   uint16_t isMinus = (reg & 0x00008000)>>15;
+    //   uint16_t positive = (reg & 0x00007FFF)-1;
+    //
+    //   if(isMinus)
+    //   {
+    //     reg = ~positive & 0x8FFF;
+    //
+    //     log_d("isMinus:%d,positive;%d,%02X,%X",isMinus,positive,positive,reg);
+    //   }
+    //
+    //   bytes[0] =  0;
+    //   bytes[1] =  0;
+    //   // bytes[2] =  reg & 0xF0;
+    //   // bytes[3] =  reg & 0x0F;
+    //   bytes[2] = (uint8_t)(reg>>8 & 0xFF);
+    //   bytes[3] = (uint8_t)(reg & 0x00FF);
+    //
+    //   rt_memcpy(pwBuf+7+i*4,bytes,4);
+    //   // if(i==0)
+    //   // {
+    //   //   rt_int32_t temp= 0;
+    //   //   temp |= bytes[0] << 24; // 最高字节
+    //   //   temp |= bytes[1] << 16;
+    //   //   temp |= bytes[2] << 8;
+    //   //   temp |= bytes[3]; // 最低字节
+    //   //   log_d("Temperature Set Point:%08x",temp);
+    //   // }
+    // }
   }
 
   *(pwBuf+ser_msg->res_size -2) = 0x03;
@@ -723,18 +742,20 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
         }
  
         log_d("i32Data: 0x%4X", (int16_t)i32Data);
-        uint16_t isMinus = (i32Data & 0x00008000)>>15;
+        // uint16_t isMinus = (i32Data & 0x00008000)>>15;
 
 
-        int16_t positive = i32Data & 0x00007FFF;
-        log_d("isMinus:%d,positive;%d",isMinus,positive);
+        // int16_t positive = i32Data & 0x00007FFF;
+        // log_d("isMinus:%d,positive;%d",isMinus,positive);
 
-        if(isMinus)
-        {
-          meta1->wrData = ~positive + 1;
-        }else{
-          meta1->wrData = (int16_t)(i32Data&0x0000FFFF);
-        }
+        // if(isMinus)
+        // {
+        //   meta1->wrData = ~positive + 1;
+        // }else{
+        //   meta1->wrData = (int16_t)(i32Data&0x0000FFFF);
+        // }
+
+        meta1->wrData = (int16_t)(i32Data&0x0000FFFF);
 
         // printf("转换后的整数值: %d\n", meta1->wrData);
         // printf("十六进制表示: 0x%X\n", meta1->wrData);

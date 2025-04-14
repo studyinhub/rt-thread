@@ -212,11 +212,11 @@ int filesystem_init(void) {
     RT_ASSERT(result == RT_EOK);
   }
 
-  mkdir_p("/mnt/filesystem/webnet", 0x777);
-  mkdir_p("/mnt/filesystem/webnet/admin", 0x777);
-  mkdir_p("/mnt/filesystem/webnet/css", 0x777);
-  mkdir_p("/mnt/filesystem/webnet/js", 0x777);
-  mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet/admin", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet/css", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet/js", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
 
   // if (dfs_mount("nand1", MOUNT_POINT_SPIFLASH0, "uffs", 0, 0) != 0)
   // {

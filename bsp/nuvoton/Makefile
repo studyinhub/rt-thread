@@ -20,6 +20,8 @@ test1:
 	@echo "hello" $(pack_file)
 
 
+release:
+	BUILD=release scons -j 8
 
 ram:reset 
 	BUILD=debug scons -j 8

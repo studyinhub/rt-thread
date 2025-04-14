@@ -31,7 +31,14 @@
 
 
 
-// 一个 block 是 64 page，page 是 2k, block:128k
+// 一个 block 是 64 page，page 是2k, block:128k 
+// nand0: 32 block = 4MB
+//    uboot-spl:
+//    env:
+//    uboot: 1MB
+//    rt_thread: 2MB
+// nand1:
+//     
 // uboot:0x100000 8 - 15 block ;1MB; 325k ~ 2.53 block, 325- 128*2 = 69k,  34.5page mtd_nand read nand0 10 43
 // app:  0x200000 16-23 block; ;1MB;
 // fs:   0x300000 24
@@ -39,26 +46,25 @@
 // nand0 3MB 基本上存储的都是系统的 spl uboot app env，这些，所以 nand0 不要存入用户数据，这部分占用的是 3MB 之前的数据，给 app 留了 1MB 的空间
 // nand1 的空间是 128-3 = 125MB， 起始地址是 0x300000 ,如果在这个位置烧写用户数据会怎么样，那么用到的文件系统是 uffs，如何生成 uffs 的 image 呢？
 // nand2 是整个分区，128MB，
-
 // nand1
 struct rt_mtd_nand_device mtd_partitions[MTD_SPINAND_PARTITION_NUM] = {
     [0] =
         {
             .block_start = 0,
-            .block_end = 25,
-            .block_total = 26,
+            .block_end = 31,
+            .block_total = 32,
         },
     [1] =
         {
-            .block_start = 26,
-            .block_end = 225,
+            .block_start = 32,
+            .block_end = 231,
             .block_total = 200,
         },
     [2] =
         {
-            .block_start = 226,
+            .block_start = 232,
             .block_end = 1023,
-            .block_total = 798,
+            .block_total = 792,
         }};
 
 static int rt_hw_spinand_init(void)
