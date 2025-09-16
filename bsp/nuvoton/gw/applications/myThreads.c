@@ -84,6 +84,7 @@ static void thread_rtu_master_entry(void *parameter) {
 
   g_stConfig.rtuSys.hold =
       rt_malloc(sizeof(uint16_t) * g_stConfig.rtuSys.scanRegCnt);
+
   rt_memset(g_stConfig.rtuSys.hold, 0,
             sizeof(uint16_t) * g_stConfig.rtuSys.scanRegCnt);
 
@@ -103,25 +104,32 @@ static void thread_rtu_master_entry(void *parameter) {
 
     // 总扫描开关
     if (!g_stConfig.rtuSys.scanEnable) {
-      rt_thread_delay(100);
+      rt_thread_delay(10);
       continue;
     }
 
-    // if msg queue empty then go await
     if (!rtu_send_mq.entry) {
       
       rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
                                       g_stConfig.rtuSys.scanRegCnt,
-                                      g_stConfig.rtuSys.hold);
+                                      (uint16_t *)g_stConfig.rtuSys.hold);
 
-      rt_thread_delay(g_stConfig.rtuSys.scanInv);
+  
+
+      // for(uint8_t i=0;i<10;i++)
+      // {
+      //   log_d("%d:%d",i,(uint16_t)g_stConfig.rtuSys.hold[i]);
+      // }
+
+      // rt_thread_delay(g_stConfig.rtuSys.scanInv);
+      rt_thread_mdelay(1);
       continue;
     }
 
 
     // need to write 
     // rt_memset(g_ctx->read_buf, 0, g_ctx->read_bufsz);
-    ret = rt_mq_recv(&rtu_send_mq, &ser_msg, sizeof(struct SER_MSG), 100);
+    ret = rt_mq_recv(&rtu_send_mq, &ser_msg, sizeof(struct SER_MSG), 0);
 
     if (ret != RT_EOK) {
       if (ret == -RT_ETIMEOUT) {
@@ -146,7 +154,7 @@ static void thread_rtu_master_entry(void *parameter) {
     int16_t offset;
     if(ser_msg.meta.wrByteQuantity>0 && ser_msg.meta.function != 3)
     {
-      log_i("wrData for ascii:%d",ser_msg.meta.wrByteQuantity);
+      
       rt_memset(rtu_wr_buf,0,sizeof(rtu_wr_buf));
       for (int i = 0; i < ser_msg.meta.wrRegQuantity; i++) {
         rtu_wr_buf[i] = ATOHInt(ser_msg.meta.wrBuf + 4 * i);
@@ -168,12 +176,12 @@ static void thread_rtu_master_entry(void *parameter) {
       }
       //
       ret = modbus_write_regs(g_ctx, ser_msg.meta.wrHead + offset,
-                              ser_msg.meta.wrRegQuantity, rtu_wr_buf);
+                              ser_msg.meta.wrRegQuantity, rtu_wr_buf );
       if (ret != RT_EOK) {
         log_e("modbus_write_regs error");
       }else{
       }
-      ser_msg.meta.wrByteQuantity = 0;
+      // ser_msg.meta.wrByteQuantity = 0;
     }
     else if(rt_strcmp(ser_msg.meta1.function,"WWR") == 0 )
     {
@@ -184,7 +192,6 @@ static void thread_rtu_master_entry(void *parameter) {
       //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
       //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
       // }
-      
 
       ret = modbus_write_regs(g_ctx, ser_msg.meta1.head+ offset,
                               ser_msg.meta1.quantity, &ser_msg.meta1.wrData);
@@ -245,12 +252,55 @@ static void thread_rtu_master_entry(void *parameter) {
     //         // rt_thread_delay(g_stConfig.scanTask[i].inv);
     //     }
     // }
+    //
 
-    rt_thread_delay(10);
+    rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
+                                      g_stConfig.rtuSys.scanRegCnt,
+                                      (uint16_t *)g_stConfig.rtuSys.hold);
+
+
+    rt_thread_mdelay(1);
   }
 }
 
 // #define TEST
+//
+//
+//
+
+
+void clear_message_queue(rt_mq_t mq)
+{
+    rt_err_t result;
+    void *msg = RT_NULL;  // 用于接收消息的缓冲区，如果不关心内容可以随意
+
+    /* 循环接收，直到队列为空 */
+    while (1)
+    {
+        result = rt_mq_recv(mq, &msg, sizeof(void *), 0);  // 0 表示不等待，立即返回
+
+        if (result == RT_EOK)
+        {
+            // 成功接收到一条消息，你可以选择处理它或者直接丢弃
+            // 这里我们只是丢弃，不做处理
+            // 如果 msg 是动态分配的内存，你可能需要释放它！
+        }
+        else if (result == -RT_ETIMEOUT || result == -RT_EEMPTY)
+        {
+            // 队列已经空了，退出循环
+            // 注意：在 RT-Thread 新版本中，空队列时返回的是 -RT_EEMPTY
+            break;
+        }
+        else
+        {
+            // 其他错误，可根据需要处理
+            rt_kprintf("rt_mq_recv error: %d\n", result);
+            break;
+        }
+    }
+
+    // rt_kprintf("Message queue cleared.\n");
+}
 
 static void thread_asc_entry(void *parameter) {
   rt_uint16_t error_count = 0;
@@ -287,7 +337,7 @@ static void thread_asc_entry(void *parameter) {
   while (1) {
     // if msg queue empty then go await
     if (!asc_recv_mq.entry) {
-      rt_thread_mdelay(100);
+      rt_thread_mdelay(1);
       continue;
     }
 
@@ -295,6 +345,8 @@ static void thread_asc_entry(void *parameter) {
           asc_recv_mq.max_msgs, asc_recv_mq.msg_size);
 
     log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
+
+
 
     ret = rt_mq_recv(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG),
                      RT_WAITING_FOREVER);
@@ -347,10 +399,13 @@ static void thread_asc_entry(void *parameter) {
     // start = clock();
     //
     ret = parse_serial_frame(&ser_msg);
+    clear_message_queue(&asc_recv_mq);
     // end = clock();
     // log_d("解析完毕,用时:%dms", end - start);
     if (ret != 1 && ret != 2) {
       log_e("parse error,no send");
+      rt_memset(ser_msg.data_ptr, '\0', 27 * 100);
+      rt_memset(ser_msg.res_ptr, '\0', 27 * 100);
       continue;
     }
 
@@ -360,7 +415,7 @@ static void thread_asc_entry(void *parameter) {
       ret = chct_build_response(&ser_msg);
     }
 
-    // print_asc_frame_meta(&ser_msg.meta);
+    print_asc_frame_meta(&ser_msg.meta);
 
     if (ret != RT_EOK) {
       log_e("ascii_build_response error,no send");
@@ -381,6 +436,11 @@ static void thread_asc_entry(void *parameter) {
 
     // ret = rt_mq_send(&rtu_send_mq, &ser_msg_rsp, sizeof(struct SER_MSG));
     ret = rt_mq_send(&rtu_send_mq, &ser_msg, sizeof(struct SER_MSG));
+  
+    log_i("需要写入字节数1111: %d",ser_msg.meta.wrByteQuantity);
+    log_i("需要写入寄存器数1111: %d",ser_msg.meta.wrRegQuantity);
+
+
 
     if (ret != RT_EOK) {
       if (ret == -RT_EFULL) {
@@ -825,6 +885,7 @@ void serial_thread_entry(void *parameter) {
       /* 发送消息到消息队列中 */
       // result = rt_mq_send(&asc_recv_mq, prBuf, buflen);
       result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG));
+
 
       if (result != RT_EOK) {
         if (result == -RT_EFULL) {

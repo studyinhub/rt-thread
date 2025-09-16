@@ -43,21 +43,27 @@ int ATOHInt(char *var)
     char var4 = *(var + 3);
 
     int temp = 0;
+
     if (var1 >= 0x30 && var1 <= 0x39)
         temp = var1 - '0';
-    else if (var1 >= 0x30 && var1 <= 0x39)
+    else if (var1 >= 'A' && var1 <= 'F')
         temp = var1 - 'A' + 10;
     temp = temp << 4;
+
     if (var2 >= 0x30 && var2 <= 0x39)
         temp = temp + var2 - '0';
     else if (var2 >= 'A' && var2 <= 'F')
         temp = temp + var2 - 'A' + 10;
     temp = temp << 4;
+
+
     if (var3 >= 0x30 && var3 <= 0x39)
         temp = temp + var3 - '0';
     else if (var3 >= 'A' && var3 <= 'F')
         temp = temp + var3 - 'A' + 10;
     temp = temp << 4;
+
+
     if (var4 >= 0x30 && var4 <= 0x39)
         temp = temp + var4 - '0';
     else if (var4 >= 'A' && var4 <= 'F')
@@ -94,7 +100,7 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
     int i = 0, j = 0;
 
     uint8_t *tempBuf = rt_malloc(sizeof(uint8_t) * len);
-    
+    // uint8_t *tempBuf = pSrcHex; 
 
     rt_memcpy(tempBuf, pSrcHex, len);
     // for (i = 0; i < len; i++)
@@ -107,7 +113,8 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
         endian_convert_int16((int16_t *)tempBuf, len / 2);
     }
 
-    char *buffer = rt_malloc(2 * len);
+    // char *buffer = rt_malloc(2 * len);
+    char *buffer = pDstAsc;
 
 
     for (i = 0; i < len; i++)
@@ -137,11 +144,9 @@ int HToAChar(char *pDstAsc, uint8_t *pSrcHex, uint16_t len, uint8_t endian)
     }
 
     buffer[2 * len] = 0x00;
-    rt_memcpy(pDstAsc, buffer, 2 * len);
-
     pDstAsc[2 * len] = 0x00;
-
-    rt_free(buffer);
+    // rt_memcpy(pDstAsc, buffer, 2 * len);
+    // rt_free(buffer);
     rt_free(tempBuf);
 
     return 1;

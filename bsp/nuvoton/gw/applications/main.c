@@ -121,7 +121,6 @@ int main(int argc, char **argv)
 
     rt_uint32_t level;
 
-    rt_kprintf("This for modbus ASCII <==> RTU\n");
 
     do
     {
@@ -141,6 +140,10 @@ int main(int argc, char **argv)
     while (1)
     {
         feed_wdt(1);
+
+
+        easyblink(led_wrk, -1, 1000, 1000);
+        easyblink(led_run, -1, 100, 500);
         rt_thread_mdelay(1000);
     }
 __exit:

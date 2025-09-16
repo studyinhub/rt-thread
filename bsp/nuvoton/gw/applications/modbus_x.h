@@ -38,6 +38,7 @@ extern int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz,
 extern rt_err_t parse_serial_frame(struct SER_MSG *ser_msg);
 extern rt_err_t ascii_parse(struct SER_MSG *ser_msg);
 extern rt_err_t ascii_build_response(struct SER_MSG *ser_msg);
+extern rt_err_t chct_build_response(struct SER_MSG *ser_msg);
 extern rt_err_t rs232_send_asc();
 extern rt_err_t rs485_send_asc();
 extern rt_err_t rs485_send_rtu();

@@ -251,7 +251,7 @@ void print_asc_frame_meta(struct ASC_FRAME_META *meta) {
     log_d("wrHead:%d", meta->wrHead);
     log_d("wrRegQuantity:%d", meta->wrRegQuantity);
     log_d("wrByteQuantity:%d", meta->wrByteQuantity);
-    ulog_hexdump("wrBuf", 16, meta->wrBuf, meta->wrByteQuantity * 2);
+    ulog_hexdump("wrBuf111111:", 16, meta->wrBuf, meta->wrByteQuantity * 2);
     log_d("lrc:%02X(%d),calc_lrc:%02X", meta->lrc, meta->lrc, meta->calc_lrc);
     log_d("--------------------------------------------");
   }
@@ -353,7 +353,6 @@ rt_err_t chct_build_response(struct SER_MSG *ser_msg) {
     ulog_hexdump("chct pwbuf",16,pwBuf,ser_msg->res_size);
 
   return RT_EOK;
-
 }
 
 
@@ -423,63 +422,94 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   ser_msg->res_size = 11;
   if (meta->function != 3 && meta->function != 6 && meta->function != 16 &&
       meta->function != 23) {
-    send_negative(pwBuf, meta->slaveAddr, meta->function, 1);
-    return RT_EOK;
+    // send_negative(pwBuf, meta->slaveAddr, meta->function, 1);
+    // return RT_EOK;
+    return RT_ERROR;
   }
 
   if (meta->calc_lrc != meta->lrc) {
-
-    send_negative(pwBuf, meta->slaveAddr, meta->function, 2);
-    return RT_EOK;
+    // send_negative(pwBuf, meta->slaveAddr, meta->function, 2);
+    // return RT_EOK;
+    return RT_ERROR;
   }
 
   if (meta->rdQuantity == 0 && meta->wrRegQuantity == 0) {
-    send_negative(pwBuf, meta->slaveAddr, meta->function, 3);
-    return RT_EOK;
+    // send_negative(pwBuf, meta->slaveAddr, meta->function, 3);
+    // return RT_EOK;
+    return RT_ERROR;
   }
 
-  log_i("valid frame,to ready response:%d", meta->rdQuantity);
+  log_i("valid frame,to ready response:%d function:%d", meta->rdQuantity, meta->function);
 
   // ulog_hexdump("test1",16,meta->wrBuf,4);
 
   rt_memset(pwBuf, '\0', bytesCnt + 1);
-  bytesCnt = meta->rdQuantity * 2;
-  bufLen = 1 + (1 + 1 + 1 + bytesCnt + 1) * 2 + 2;
-  // log_d("ser_msg->data_size:%d bufLen:%d", ser_msg->data_size, bufLen);
-  ser_msg->res_size = bufLen;
+
+
   *pwBuf = ':';
   HToAChar(pwBuf + 1, &meta->slaveAddr, 1, 0);
   HToAChar(pwBuf + 3, &meta->function, 1, 0);
-  HToAChar(pwBuf + 5, (uint8_t *)&bytesCnt, 1, 0);
-  if (meta->rdQuantity) {
-    // ser_msg->data_ptr = rt_malloc(bufLen + 1);
-    // if(pwBuf == RT_NULL)
-    //  {
-    //    log_e("malloc pwBuf faild");
-    //    return -RT_EOK;
-    //  }
 
-    int16_t offset = 0;
-    if (g_stConfig.mapEnable) {
+  switch(meta->function)
+  {
+    case 16:
+    bytesCnt = meta->wrRegQuantity*4; 
+    bufLen = 1 + (1 + 1 + 1 + 1 + 1 ) * 2 + bytesCnt + 2;
+    ser_msg->res_size = bufLen;
+    log_d("1111bufLen:%d start addr:%d, reg_quantity:%d, wrByteQuantity:%d",bufLen, meta->wrHead,meta->wrRegQuantity,meta->wrByteQuantity); 
 
-      offset = g_stConfig.ascSys[meta->slaveAddr - 1].offset;
+    HToAChar(pwBuf + 5, (uint8_t *)&meta->wrHead, 4, 1);
+    HToAChar(pwBuf + 9, (uint8_t *)&meta->wrRegQuantity, 4, 1);
 
-      log_d("1rdHead:%d offset:%d", meta->rdHead, offset);
-      if (meta->rdHead >= 256) {
-        offset -= 256;
+
+    log_d("222bufLen:%d start addr:%d, reg_quantity:%d, wrByteQuantity:%d",bufLen, meta->wrHead,meta->wrRegQuantity,meta->wrByteQuantity); 
+
+    calc_lrc = ASCII_LRC(pwBuf + 1, bufLen - 5);
+    break;
+    case 3:
+    case 23:
+    bytesCnt = meta->rdQuantity * 2;
+    bufLen = 1 + (1 + 1 + 1 + bytesCnt + 1) * 2 + 2;
+    // log_d("ser_msg->data_size:%d bufLen:%d", ser_msg->data_size, bufLen);
+    ser_msg->res_size = bufLen;
+    HToAChar(pwBuf + 5, (uint8_t *)&bytesCnt, 1, 0);
+    if (meta->rdQuantity) {
+      // ser_msg->data_ptr = rt_malloc(bufLen + 1);
+      // if(pwBuf == RT_NULL)
+      //  {
+      //    log_e("malloc pwBuf faild");
+      //    return -RT_EOK;
+      //  }
+
+      int16_t offset = 0;
+      if (g_stConfig.mapEnable) {
+
+        offset = g_stConfig.ascSys[meta->slaveAddr - 1].offset;
+
+        log_d("1rdHead:%d offset:%d", meta->rdHead, offset);
+        if (meta->rdHead >= 256) {
+          offset -= 256;
+        }
+
+       log_d("2rdHead:%d offset:%d", meta->rdHead, offset);
+        
+       uint16_t value = *(g_stConfig.rtuSys.hold + 2 * (meta->rdHead + offset));
+
+       log_d("value:%04X",value);
+
       }
 
-      log_d("2rdHead:%d offset:%d", meta->rdHead, offset);
+      HToAChar(pwBuf + 7,
+              (uint8_t *)g_stConfig.rtuSys.hold + 2 * (meta->rdHead + offset),
+              bytesCnt, 1);
+      calc_lrc = ASCII_LRC(pwBuf + 1, bufLen - 5);
     }
-
-    HToAChar(pwBuf + 7,
-             (uint8_t *)g_stConfig.rtuSys.hold + 2 * (meta->rdHead + offset),
-             bytesCnt, 1);
+    break;
   }
+
   // :01 17 00 E8
   // :02 17 00 E7
-  calc_lrc = ASCII_LRC(pwBuf + 1, bufLen - 5);
-  // log_d("calc_lrc:0x%02X", calc_lrc);
+  log_d("calc_lrc:0x%02X", calc_lrc);
   // 倒数第4个起
   HToAChar(pwBuf + bufLen - 4, (uint8_t *)&calc_lrc, 1, 0);
   // rt_memcpy(pwBuf + bufLen - 2, "\r\n", 2);
@@ -487,8 +517,11 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   *(pwBuf + bufLen - 1) = '\n';
   *(pwBuf + bufLen) = '\0';
 
-  log_d("req:%s", prBuf);
-  log_d("2------------pwBuf->%s", pwBuf);
+  log_d("上位机请求:%s", prBuf);
+  log_d("响应给上位机:%s", pwBuf);
+
+
+  log_d("333333bufLen:%d start addr:%d, reg_quantity:%d, wrByteQuantity:%d",bufLen, meta->wrHead,meta->wrRegQuantity,meta->wrByteQuantity); 
 
   // log_d("ascii_build_response(%d):", ser_msg->res_size);
   // if (LOG_LVL == LOG_LVL_DBG) {
@@ -517,7 +550,6 @@ struct frame {
   int frame_start;
   int frame_end;
 };
-
 
 
 rt_err_t find_frame(char *buf,rt_uint32_t len,uint8_t sof,uint8_t *eof,struct frame *arr)
@@ -588,6 +620,7 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
 
   struct ASC_FRAME_META *meta = &ser_msg->meta;
   struct CHCT_FRAME_META *meta1 = &ser_msg->meta1;
+
   if(ret>0)
   {
 
@@ -614,12 +647,18 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
         meta->wrBuf = pStart + 9;
         meta->lrc = ATOHChar(pStart + 13);
         break;
+      case 10:
+          log_e("Not supported now");
+        break;
       case 16:
         meta->wrHead = ATOHInt(pStart + 5);
         meta->wrRegQuantity = ATOHInt(pStart + 9);
-        meta->wrByteQuantity = ATOHInt(pStart + 13);
+        meta->wrByteQuantity = ATOHChar(pStart + 13);
         meta->wrBuf = pStart + 15;
         meta->lrc = ATOHChar(pStart + 15 + meta->wrByteQuantity * 2);
+      
+
+        log_d("write byte:%d",meta->wrByteQuantity);
         break;
       case 23:
         meta->rdHead = ATOHInt(pStart + 5);
@@ -641,6 +680,8 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
       print_asc_frame_meta(meta);
     }
     return 1;
+  }else{
+    log_e("Not find valid ascii frame");
   }
 
   sof=0x02;
@@ -652,6 +693,7 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
   
   if(ret<0)
   {
+    log_e("Not find chct frame");
     return -RT_ERROR;
   }
 
@@ -821,6 +863,43 @@ int rs485_send(struct SER_PORT *port, uint8_t *buf, int len) {
   return len;
 }
 
+
+void uart_flush_rx(const char *uart_name)
+{
+    struct rt_device *dev;
+    uint8_t buf[64];
+    rt_size_t len;
+
+    dev = rt_device_find(uart_name);
+    if (dev == RT_NULL)
+    {
+        rt_kprintf("UART device %s not found!\n", uart_name);
+        return;
+    }
+
+    while (1)
+    {
+        len = rt_device_read(dev, 0, buf, sizeof(buf));
+        if (len > 0)
+        {
+            // 接收到数据，但丢弃
+        }
+        else if (len == 0)
+        {
+            // 没有数据，缓冲区已空
+            break;
+        }
+        else
+        {
+            rt_kprintf("Error flushing UART %s: %d\n", uart_name, len);
+            break;
+        }
+    }
+
+    // rt_kprintf("UART[%s] RX buffer flushed.\n", uart_name);
+}
+
+
 // timeout:要求下位机必须在 timeout 时间内回复，否则会认为读取超时
 int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
   int len = 0;
@@ -833,7 +912,7 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
   rt_sem_take(&port->lock_sem, RT_WAITING_FOREVER);
   // log_d("read bufsz:%d", *bufsz);
   while (1) {
-
+  
     // rt_sem_control(&port->rx_sem, RT_IPC_CMD_RESET, RT_NULL);
     /* 阻塞等待接收信号量，等到中断后再次读取数据 */
     if (rt_sem_take(&port->rx_sem, rt_tick_from_millisecond(timeout)) !=
@@ -842,7 +921,7 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
       break;
     }
 
-    rc = rt_device_read(dev, 0, buf + len, bufsz);
+    rc = rt_device_read(dev, -1, buf + len, 1);
     if (rc > 0) {
       // if (rt_strcmp(port->dev_name, "uart6") == 0) {
       //   rt_kprintf("rc:%d,bufsz:%d", rc, bufsz);
@@ -854,6 +933,8 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
       continue;
     }
   }
+
+  uart_flush_rx(port->dev_name);
 
   rt_sem_release(&port->lock_sem);
 
@@ -881,7 +962,7 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
       ulog_hexdump("send", 16, ctx->send_buf, snd_len);
 
     rt_memset(ctx->read_buf, 0, ctx->read_bufsz);
-    rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 500);
+    rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 10);
     if (LOG_LVL == LOG_LVL_DBG)
       ulog_hexdump("recv", 16, ctx->read_buf, rcv_len);
     if (rcv_len == 8) {
@@ -924,11 +1005,13 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
 
   // 读取数据,500 ms 内读完
   // 帧间隔:g_stConfig.serPorts[0].frameInterval
+  //
 
-  rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 500);
+  rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 100);
+
+  // log_d("recv:%d bufsz:%d", rcv_len, ctx->read_bufsz);
 
   if (rcv_len <= 0 || rcv_len != ctx->read_bufsz) {
-    log_d("recv:%d bufsz:%d", rcv_len, ctx->read_bufsz);
     log_w("rs485_receive error");
     // log_d("数据读取错误 readsize:%d read_len:%d",g_ctx->read_bufsz,read_len);
     // log_e("没有读取到数据,检查下位机设备是否连接正常");
@@ -941,7 +1024,7 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
   // if(LOG_LVL == LOG_LVL_DBG)
   //   ulog_hexdump("recv", 16, ctx->read_buf, ctx->read_bufsz);
 
-  rc = agile_modbus_deserialize_read_registers(g_ctx, rcv_len, buf);
+  rc = agile_modbus_deserialize_read_registers(g_ctx, rcv_len, (uint16_t *)buf);
   if (rc < 0) {
     log_e("Receive failed.%d", rc);
     if (rc != -1)
@@ -973,6 +1056,8 @@ static rt_err_t uart_tx_com(rt_device_t dev, void *buffer) {
   log_d("%s 发送完毕", dev->parent.name);
 }
 
+
+
 /* 接收数据回调函数 */
 static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size) {
 
@@ -984,17 +1069,12 @@ static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size) {
   // log_d("size:%d\n", size);
 
   struct SER_PORT *port = NULL;
-
   /* 串口接收到数据后产生中断，调用此回调函数，然后发送接收信号量 */
   if (size > 0) {
     for (int i = 0; i < SER_PORTS_CNT; i++) {
-
       port = &g_stConfig.serPorts[i];
-
       if (!rt_strcmp((char *)port->dev_name, dev->parent.name)) {
-
         rt_sem_release(&(port->rx_sem));
-
         // 与 linux 不同，这里不能直接调用 clock(),否则导致系统直接重启
         // 这里要通过信号量通知唤起线程去读取
       }
@@ -1155,7 +1235,7 @@ int init_ser_ports() {
     rt_sem_init(&ser_port->lock_sem, sem_name, 1, RT_IPC_FLAG_PRIO);
 
     /* Interrupt RX */
-    ret = rt_device_open(ser_port->device, RT_DEVICE_FLAG_INT_RX);
+    ret = rt_device_open(ser_port->device, RT_DEVICE_OFLAG_RDWR | RT_DEVICE_FLAG_INT_RX);
     RT_ASSERT(ret == RT_EOK);
 
     memset(ser_port->rx_buf, 0, MAX_BUF_LENGTH);
