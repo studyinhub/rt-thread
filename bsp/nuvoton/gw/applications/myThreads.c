@@ -97,7 +97,6 @@ static void thread_rtu_master_entry(void *parameter) {
   }
 
   rt_err_t ret;
-
   uint16_t rtu_wr_buf[AGILE_MODBUS_MAX_WRITE_REGISTERS];
 
   while (1) {
@@ -109,7 +108,8 @@ static void thread_rtu_master_entry(void *parameter) {
     }
 
     if (!rtu_send_mq.entry) {
-      
+     
+      // log_d("scan start:%d",g_stConfig.rtuSys.scanStAddr);
       rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
                                       g_stConfig.rtuSys.scanRegCnt,
                                       (uint16_t *)g_stConfig.rtuSys.hold);
@@ -151,9 +151,15 @@ static void thread_rtu_master_entry(void *parameter) {
     // ulog_hexdump("wrbuf",16,ser_msg.meta.wrBuf,ser_msg.meta.wrByteQuantity*2);
 
    
-    int16_t offset;
-    if(ser_msg.meta.wrByteQuantity>0 && ser_msg.meta.function != 3)
+    int16_t offset = 0;
+
+    if(ser_msg.meta.wrByteQuantity>0)
     {
+
+      if(ser_msg.meta.function != 16 && ser_msg.meta.function != 23)
+      {
+        continue;
+      }
       
       rt_memset(rtu_wr_buf,0,sizeof(rtu_wr_buf));
       for (int i = 0; i < ser_msg.meta.wrRegQuantity; i++) {
@@ -179,28 +185,34 @@ static void thread_rtu_master_entry(void *parameter) {
                               ser_msg.meta.wrRegQuantity, rtu_wr_buf );
       if (ret != RT_EOK) {
         log_e("modbus_write_regs error");
-      }else{
       }
       // ser_msg.meta.wrByteQuantity = 0;
     }
-    else if(rt_strcmp(ser_msg.meta1.function,"WWR") == 0 )
-    {
-      log_i("wrData for chct:%d",ser_msg.meta1.wrData);
-      offset = 0;
-      rt_memset(rtu_wr_buf,0,sizeof(rtu_wr_buf));
-      // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
-      //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
-      //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
-      // }
 
-      ret = modbus_write_regs(g_ctx, ser_msg.meta1.head+ offset,
-                              ser_msg.meta1.quantity, &ser_msg.meta1.wrData);
-      if (ret != RT_EOK) {
-        log_e("modbus_write_regs error");
-      }else{
+    log_d("12312312313 ser_msg.meta1.quantity:%d",ser_msg.meta1.quantity);
+    
+    if(ser_msg.meta1.quantity > 0)
+    {
+      if(rt_strcmp(ser_msg.meta1.function,"WWR") == 0 )
+      {
+        log_i("wrData for chct:%d",ser_msg.meta1.wrData);
+        offset = 0;
+        rt_memset(rtu_wr_buf,0,sizeof(rtu_wr_buf));
+        // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
+        //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
+        //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
+        // }
+
+        ret = modbus_write_regs(g_ctx, ser_msg.meta1.head+ offset,
+                                ser_msg.meta1.quantity, &ser_msg.meta1.wrData);
+        if (ret != RT_EOK) {
+          log_e("modbus_write_regs error");
+        }else{
+        }
+        rt_memset(ser_msg.meta1.function,'\0',4);
       }
-      rt_memset(ser_msg.meta1.function,'\0',4);
     }
+
 
 
     // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
@@ -346,11 +358,11 @@ static void thread_asc_entry(void *parameter) {
 
     log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
 
-
-
     ret = rt_mq_recv(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG),
                      RT_WAITING_FOREVER);
 
+
+    // clear_message_queue(&asc_recv_mq);
     log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
 
     if (ret != RT_EOK) {
@@ -399,7 +411,6 @@ static void thread_asc_entry(void *parameter) {
     // start = clock();
     //
     ret = parse_serial_frame(&ser_msg);
-    clear_message_queue(&asc_recv_mq);
     // end = clock();
     // log_d("解析完毕,用时:%dms", end - start);
     if (ret != 1 && ret != 2) {
@@ -415,7 +426,7 @@ static void thread_asc_entry(void *parameter) {
       ret = chct_build_response(&ser_msg);
     }
 
-    print_asc_frame_meta(&ser_msg.meta);
+    // print_asc_frame_meta(&ser_msg.meta);
 
     if (ret != RT_EOK) {
       log_e("ascii_build_response error,no send");
@@ -427,6 +438,7 @@ static void thread_asc_entry(void *parameter) {
 
     // rs485_send(ser_msg.port,ser_msg_rsp.data_ptr,ser_msg_rsp.data_size);
     rs485_send(ser_msg.port, ser_msg.res_ptr, ser_msg.res_size);
+
     // rs485_send(ser_msg.port,ser_msg.res_ptr,ser_msg.data_size);
 
     // if(!asc_frame_meta.wrRegQuantity || asc_frame_meta.function ==3)
@@ -439,7 +451,6 @@ static void thread_asc_entry(void *parameter) {
   
     log_i("需要写入字节数1111: %d",ser_msg.meta.wrByteQuantity);
     log_i("需要写入寄存器数1111: %d",ser_msg.meta.wrRegQuantity);
-
 
 
     if (ret != RT_EOK) {
@@ -829,7 +840,7 @@ void serial_thread_entry(void *parameter) {
     // rt_sem_control(&g_stConfig.serPort[index].rx_sem, RT_IPC_CMD_RESET,
     // RT_NULL);
     // rt_sem_take(&g_stConfig.serPort[index].rx_sem, RT_WAITING_FOREVER);
-    readlen = rs485_receive(ser_port, prBuf, MAX_BUF_LENGTH, 50);
+    readlen = rs485_receive(ser_port, prBuf, MAX_BUF_LENGTH, 100);
     //
     // start = clock();
     // // 从第1个字节开始计时，超过 10ms，就终止本次读取

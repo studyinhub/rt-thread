@@ -469,8 +469,9 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
     case 3:
     case 23:
     bytesCnt = meta->rdQuantity * 2;
-    bufLen = 1 + (1 + 1 + 1 + bytesCnt + 1) * 2 + 2;
-    // log_d("ser_msg->data_size:%d bufLen:%d", ser_msg->data_size, bufLen);
+
+    bufLen = 1 + (1 + 1 + 1 + 1) * 2 + bytesCnt*2 + 2;
+    log_d("ser_msg->data_size:%d byteCnt:%d bufLen:%d", ser_msg->data_size,bytesCnt, bufLen);
     ser_msg->res_size = bufLen;
     HToAChar(pwBuf + 5, (uint8_t *)&bytesCnt, 1, 0);
     if (meta->rdQuantity) {
@@ -491,6 +492,7 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
           offset -= 256;
         }
 
+
        log_d("2rdHead:%d offset:%d", meta->rdHead, offset);
         
        uint16_t value = *(g_stConfig.rtuSys.hold + 2 * (meta->rdHead + offset));
@@ -501,9 +503,10 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
 
       HToAChar(pwBuf + 7,
               (uint8_t *)g_stConfig.rtuSys.hold + 2 * (meta->rdHead + offset),
-              bytesCnt, 1);
-      calc_lrc = ASCII_LRC(pwBuf + 1, bufLen - 5);
+              bufLen, 1);
     }
+    
+    calc_lrc = ASCII_LRC(pwBuf + 1, bufLen - 5);
     break;
   }
 
@@ -656,8 +659,6 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
         meta->wrByteQuantity = ATOHChar(pStart + 13);
         meta->wrBuf = pStart + 15;
         meta->lrc = ATOHChar(pStart + 15 + meta->wrByteQuantity * 2);
-      
-
         log_d("write byte:%d",meta->wrByteQuantity);
         break;
       case 23:
@@ -846,15 +847,14 @@ int rs485_send(struct SER_PORT *port, uint8_t *buf, int len) {
   // struct SER_PORT *port = &g_stConfig.serPorts[0];
   // rt_device_write(port->device, 0, buf, len);
   // ulog_hexdump("rs485_send", 16, buf, len);
-  rt_sem_take(&port->lock_sem, RT_WAITING_FOREVER);
+  // rt_sem_take(&port->lock_sem, RT_WAITING_FOREVER);
   write_len = rt_device_write(dev, 0, buf, len);
   // if(rt_strcmp(port->dev_name,"uart8")!=0)
   //    log_d("write_len:%d,%d",write_len,len);
   if (write_len != len) {
     log_e("not all data wrote");
   }
-
-  rt_sem_release(&port->lock_sem);
+  // rt_sem_release(&port->lock_sem);
 
   // if (!rt_strcmp((char *)dev->parent.name, "uart6"))
   // {
@@ -962,9 +962,10 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
       ulog_hexdump("send", 16, ctx->send_buf, snd_len);
 
     rt_memset(ctx->read_buf, 0, ctx->read_bufsz);
-    rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 10);
+    rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 50);
     if (LOG_LVL == LOG_LVL_DBG)
       ulog_hexdump("recv", 16, ctx->read_buf, rcv_len);
+
     if (rcv_len == 8) {
       log_i("write success");
       break;
@@ -973,6 +974,7 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
       log_d("retry:%d \r\n", retry_times);
     }
 
+    rt_thread_mdelay(10);
   } while (retry_times--);
 
   if (retry_times == 0) {
@@ -1007,7 +1009,7 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
   // 帧间隔:g_stConfig.serPorts[0].frameInterval
   //
 
-  rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 100);
+  rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 500);
 
   // log_d("recv:%d bufsz:%d", rcv_len, ctx->read_bufsz);
 
