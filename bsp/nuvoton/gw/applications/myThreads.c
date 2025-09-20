@@ -72,9 +72,17 @@ ALIGN(RT_ALIGN_SIZE)
 static char thread_rtu_master_stack[1024];
 static struct rt_thread thread_rtu_master;
 
-struct SER_MSG ser_msg; /* 用于放置消息的局部变量 */
+struct SER_MSG ser_msg; 
 
-// rt_mutex_t dynamic_mutex = RT_NULL;
+rt_mutex_t dynamic_mutex = RT_NULL;
+
+
+struct RTU_WRITE {
+  uint16_t start_addr;
+  uint16_t wrRegQuantity;
+  uint16_t data[AGILE_MODBUS_MAX_WRITE_REGISTERS];
+};
+
 
 static void thread_rtu_master_entry(void *parameter) {
 
@@ -88,16 +96,9 @@ static void thread_rtu_master_entry(void *parameter) {
   rt_memset(g_stConfig.rtuSys.hold, 0,
             sizeof(uint16_t) * g_stConfig.rtuSys.scanRegCnt);
 
-  struct SER_MSG ser_msg;
-  ser_msg.data_size = 0;
-  ser_msg.data_ptr = rt_malloc(1024);
 
-  if (ser_msg.data_ptr == RT_NULL) {
-    log_e("core mem malloc faild");
-  }
+  rt_err_t ret = RT_EOK;
 
-  rt_err_t ret;
-  uint16_t rtu_wr_buf[AGILE_MODBUS_MAX_WRITE_REGISTERS];
 
   while (1) {
 
@@ -106,116 +107,39 @@ static void thread_rtu_master_entry(void *parameter) {
       rt_thread_delay(10);
       continue;
     }
-
-    if (!rtu_send_mq.entry) {
-     
-      // log_d("scan start:%d",g_stConfig.rtuSys.scanStAddr);
-      rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
-                                      g_stConfig.rtuSys.scanRegCnt,
-                                      (uint16_t *)g_stConfig.rtuSys.hold);
-
-  
-
-      // for(uint8_t i=0;i<10;i++)
-      // {
-      //   log_d("%d:%d",i,(uint16_t)g_stConfig.rtuSys.hold[i]);
-      // }
-
-      // rt_thread_delay(g_stConfig.rtuSys.scanInv);
-      rt_thread_mdelay(1);
-      continue;
-    }
-
-
-    // need to write 
-    // rt_memset(g_ctx->read_buf, 0, g_ctx->read_bufsz);
-    ret = rt_mq_recv(&rtu_send_mq, &ser_msg, sizeof(struct SER_MSG), 0);
-
-    if (ret != RT_EOK) {
-      if (ret == -RT_ETIMEOUT) {
-        log_e("rt_mq_recv timeout");
-      } else if (ret == -RT_ERROR) {
-        log_e("rt_mq_recv error");
-      }
-      continue;
-    }
-
-    // if(LOG_LVL == LOG_LVL_DBG)
-    // {
-    //   log_d("ser_msg.data_size:%d
-    //   port:%s",ser_msg.data_size,ser_msg.port->dev_name);
-    //   ulog_hexdump("asc_recv",16,ser_msg.data_ptr,ser_msg.data_size);
-    // }
-
-    // log_d("write to rtu %02X",*(ser_msg.meta.wrBuf));
-    // ulog_hexdump("wrbuf",16,ser_msg.meta.wrBuf,ser_msg.meta.wrByteQuantity*2);
-
-   
-    int16_t offset = 0;
-
-    if(ser_msg.meta.wrByteQuantity>0)
+    
+    if(rtu_send_mq.entry)
     {
-
-      if(ser_msg.meta.function != 16 && ser_msg.meta.function != 23)
-      {
-        continue;
-      }
       
-      rt_memset(rtu_wr_buf,0,sizeof(rtu_wr_buf));
-      for (int i = 0; i < ser_msg.meta.wrRegQuantity; i++) {
-        rtu_wr_buf[i] = ATOHInt(ser_msg.meta.wrBuf + 4 * i);
-        log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
-      }
+      struct RTU_WRITE rtu_write;
+      ret = rt_mq_recv(&rtu_send_mq, &rtu_write, sizeof(struct RTU_WRITE),
+                     RT_WAITING_FOREVER);
 
-      // print_asc_frame_meta(&ser_msg.meta);
-      offset = g_stConfig.ascSys[ser_msg.meta.slaveAddr - 1].offset;
+      // log_e("rtu_send_mq(%d): %d %d",rtu_send_mq.entry,rtu_write.start_addr,rtu_write.wrRegQuantity);
 
-      if (g_stConfig.mapEnable) {
 
-        offset = g_stConfig.ascSys[ser_msg.meta.slaveAddr - 1].offset;
+      ret = modbus_write_regs(g_ctx, rtu_write.start_addr,
+                              rtu_write.wrRegQuantity, rtu_write.data);
 
-        if (ser_msg.meta.wrHead >= 256) {
-          offset -= 256;
-        }
-        log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
-              ser_msg.meta.wrHead + offset);
-      }
-      //
-      ret = modbus_write_regs(g_ctx, ser_msg.meta.wrHead + offset,
-                              ser_msg.meta.wrRegQuantity, rtu_wr_buf );
       if (ret != RT_EOK) {
         log_e("modbus_write_regs error");
       }
-      // ser_msg.meta.wrByteQuantity = 0;
+
     }
 
-    log_d("12312312313 ser_msg.meta1.quantity:%d",ser_msg.meta1.quantity);
-    
-    if(ser_msg.meta1.quantity > 0)
-    {
-      if(rt_strcmp(ser_msg.meta1.function,"WWR") == 0 )
-      {
-        log_i("wrData for chct:%d",ser_msg.meta1.wrData);
-        offset = 0;
-        rt_memset(rtu_wr_buf,0,sizeof(rtu_wr_buf));
-        // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
-        //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
-        //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
-        // }
+    // log_d("scan start:%d",g_stConfig.rtuSys.scanStAddr);
+    rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
+                                    g_stConfig.rtuSys.scanRegCnt,
+                                    (uint16_t *)g_stConfig.rtuSys.hold);
+    rt_thread_mdelay(1);
 
-        ret = modbus_write_regs(g_ctx, ser_msg.meta1.head+ offset,
-                                ser_msg.meta1.quantity, &ser_msg.meta1.wrData);
-        if (ret != RT_EOK) {
-          log_e("modbus_write_regs error");
-        }else{
-        }
-        rt_memset(ser_msg.meta1.function,'\0',4);
-      }
-    }
+    // for(uint8_t i=0;i<10;i++)
+    // {
+    //   log_d("%d:%d",i,(uint16_t)g_stConfig.rtuSys.hold[i]);
+    // }
 
+    // rt_thread_delay(g_stConfig.rtuSys.scanInv);
 
-
-    // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
 
     // if (ret != RT_EOK)
     // {
@@ -232,7 +156,6 @@ static void thread_rtu_master_entry(void *parameter) {
     //     g_stConfig.rtuSys.scanRegCnt,
     //     g_stConfig.rtuSys.hold);
 
-    // rt_mutex_release(dynamic_mutex);
 
     // for (i = 0; i < 3; i++)
     // {
@@ -266,9 +189,6 @@ static void thread_rtu_master_entry(void *parameter) {
     // }
     //
 
-    rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
-                                      g_stConfig.rtuSys.scanRegCnt,
-                                      (uint16_t *)g_stConfig.rtuSys.hold);
 
 
     rt_thread_mdelay(1);
@@ -342,6 +262,8 @@ static void thread_asc_entry(void *parameter) {
   rt_memset(ser_msg.data_ptr, '\0', 27 * 100);
   rt_memset(ser_msg.res_ptr, '\0', 27 * 100);
 
+
+
 #endif
   // log_d("mq buf(%d)",ser_msg->data_size);
   //
@@ -353,17 +275,19 @@ static void thread_asc_entry(void *parameter) {
       continue;
     }
 
+
+    // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
+
     log_d("asc_recv_mq.entry:%d/%d size:%d", asc_recv_mq.entry,
           asc_recv_mq.max_msgs, asc_recv_mq.msg_size);
 
     log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
 
+
     ret = rt_mq_recv(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG),
                      RT_WAITING_FOREVER);
 
 
-    // clear_message_queue(&asc_recv_mq);
-    log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
 
     if (ret != RT_EOK) {
       if (ret == -RT_ETIMEOUT) {
@@ -374,43 +298,51 @@ static void thread_asc_entry(void *parameter) {
       continue;
     }
 
-    if (LOG_LVL == LOG_LVL_DBG) {
-      log_d("ser_msg.data_size:%d port:%s", ser_msg.data_size,
-            ser_msg.port->dev_name);
-      ulog_hexdump("asc_recv", 16, ser_msg.data_ptr, ser_msg.data_size);
-    }
+     // if (ret != RT_EOK) {
+     //    if (ret == -RT_EFULL) {
+     //      log_e("ASCII 接收线程消息队列已满,请清空");
+     //    } else if (ret == -RT_ERROR) {
+     //      log_e("msg maybe too large than max_msgs");
+     //    } else {
+     //      log_e("mq send to asc_resp_mq error unkown");
+     //    }
+     //    continue;
+     //  }
 
-    // if data_size too small then drop
-    // :010300000007F5
-    // :011700040003000B000204009B000134
-    if (ser_msg.data_size < 8) {
-      log_d("ser_msg:%d", ser_msg.data_size);
-      // if(ser_msg.data_ptr)
-      //   rt_free(ser_msg.data_ptr);
-      continue;
-    }
+
+    log_e("asc_recv_mq(%d)(%d):%s",asc_recv_mq.entry,ser_msg.data_size,ser_msg.data_ptr);
+
+
+
+
+    // clear_message_queue(&asc_recv_mq);
+    // log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
+    // if (LOG_LVL == LOG_LVL_DBG) {
+    //   log_d("ser_msg.data_size:%d port:%s", ser_msg.data_size,
+    //         ser_msg.port->dev_name);
+    //   ulog_hexdump("asc_recv", 16, ser_msg.data_ptr, ser_msg.data_size);
+    // }
+
     // if(ser_msg.data_size != rt_strlen(ser_msg.data_ptr))
     // {
     //     log_e(":%d,%d",ser_msg.data_size,rt_strlen(ser_msg.data_ptr));
     //     continue;
     // }
 
-#ifdef TEST
-    log_d("mq buf(%d)", ser_msg->data_size);
-#else
-    // log_d("mq buf(%d):%s",ser_msg.data_size,ser_msg.data_ptr);
+    // log_e("mq buf(%d):%s",ser_msg.data_size,ser_msg.data_ptr);
 
     // log_d("ascii_parse(%d):",ser_msg.data_size);
-    if (LOG_LVL == LOG_LVL_DBG) {
-      for (int i = 0; i < ser_msg.data_size; i++) {
-        rt_kprintf("%c", *(ser_msg.data_ptr + i));
-      }
-    }
+    // if (LOG_LVL == LOG_LVL_DBG) {
+    //   for (int i = 0; i < ser_msg.data_size; i++) {
+    //     rt_kprintf("%c", *(ser_msg.data_ptr + i));
+    //   }
+    // }
 
-    log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
+    // log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
     // start = clock();
     //
     ret = parse_serial_frame(&ser_msg);
+
     // end = clock();
     // log_d("解析完毕,用时:%dms", end - start);
     if (ret != 1 && ret != 2) {
@@ -436,34 +368,81 @@ static void thread_asc_entry(void *parameter) {
       continue;
     }
 
-    // rs485_send(ser_msg.port,ser_msg_rsp.data_ptr,ser_msg_rsp.data_size);
     rs485_send(ser_msg.port, ser_msg.res_ptr, ser_msg.res_size);
+    
 
-    // rs485_send(ser_msg.port,ser_msg.res_ptr,ser_msg.data_size);
-
-    // if(!asc_frame_meta.wrRegQuantity || asc_frame_meta.function ==3)
-    // {
-    //   continue;
-    // }
-
-    // ret = rt_mq_send(&rtu_send_mq, &ser_msg_rsp, sizeof(struct SER_MSG));
-    ret = rt_mq_send(&rtu_send_mq, &ser_msg, sizeof(struct SER_MSG));
-  
-    log_i("需要写入字节数1111: %d",ser_msg.meta.wrByteQuantity);
-    log_i("需要写入寄存器数1111: %d",ser_msg.meta.wrRegQuantity);
+    if(ser_msg.meta.wrRegQuantity>0 || ser_msg.meta1.quantity>0)
+    {
 
 
-    if (ret != RT_EOK) {
-      if (ret == -RT_EFULL) {
-        log_e("ASCII 接收线程消息队列已满,请清空");
-      } else if (ret == -RT_ERROR) {
-        log_e("msg maybe too large than max_msgs");
-      } else {
-        log_e("mq send to asc_resp_mq error unkown");
+      struct RTU_WRITE rtu_write;
+      rt_memset(rtu_write.data,0,sizeof(AGILE_MODBUS_MAX_WRITE_REGISTERS));
+
+      if(ser_msg.meta.wrRegQuantity>0)
+      {
+        if(ser_msg.meta.function != 16 && ser_msg.meta.function != 23)
+        {
+          continue;
+        }
+
+      // print_asc_frame_meta(&ser_msg.meta);
+
+        for (int i = 0; i < ser_msg.meta.wrRegQuantity; i++) {
+          rtu_write.data[i] = ATOHInt(ser_msg.meta.wrBuf + 4 * i);
+          // log_e("rtu_write.data[%d]:%02X", i,rtu_write.data[i]);
+        }
+
+        int16_t offset = 0; 
+
+        if (g_stConfig.mapEnable) {
+
+          offset = g_stConfig.ascSys[ser_msg.meta.slaveAddr - 1].offset;
+
+          if (ser_msg.meta.wrHead >= 256) {
+            offset -= 256;
+          }
+          log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
+                ser_msg.meta.wrHead + offset);
+        }
+
+        rtu_write.start_addr = ser_msg.meta.wrHead + offset;
+        rtu_write.wrRegQuantity = ser_msg.meta.wrRegQuantity;
       }
-      continue;
+
+      if(ser_msg.meta1.quantity>0)
+      {
+
+        if(rt_strcmp(ser_msg.meta1.function,"WWR") == 0 )
+        {
+          log_i("wrData for chct:%d",meta1->wrData);
+          // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
+          //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
+          //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
+          // }
+          
+          rtu_write.start_addr = ser_msg.meta1.head;
+          rtu_write.wrRegQuantity = ser_msg.meta1.quantity;
+          rtu_write.data[0] = ser_msg.meta1.wrData;
+
+          // ret = modbus_write_regs(g_ctx, meta1->head,
+          //                         meta1->quantity, &meta1->wrData);
+          // if (ret != RT_EOK) {
+          //   log_e("modbus_write_regs error");
+          // }else{
+          // }
+         rt_memset(ser_msg.meta1.function,'\0',4);
+        }
+      }
+        ret = rt_mq_send(&rtu_send_mq,&rtu_write,sizeof(struct RTU_WRITE));
+        ser_msg.meta.wrByteQuantity = 0;
+        ser_msg.meta1.quantity = 0;
     }
 
+    rt_memset(ser_msg.data_ptr,'\0',ser_msg.data_size);
+
+
+
+    // rt_mutex_release(dynamic_mutex);
     // if(ser_msg_rsp.data_ptr)
     // {
     //   rt_free(ser_msg_rsp.data_ptr);
@@ -472,15 +451,9 @@ static void thread_asc_entry(void *parameter) {
     // ascii_parse(&ser_msg);
     // end = clock();
     // log_d("解析完毕,用时:%dms", end - start);
-
-#endif
-  }
-#ifdef TEST
-  rt_free(ser_msg);
-#else
+   }
   if (ser_msg.data_ptr)
     rt_free(ser_msg.data_ptr);
-#endif
 }
 
 // static void thread_asc_resp_entry(void *parameter)
@@ -629,12 +602,12 @@ int threads_init(void) {
   //                     邮箱中的邮件数目，因为一封邮件占 4 字节 */
   //                     RT_IPC_FLAG_FIFO);   /* 采用 FIFO 方式进行线程等待 */
 
-  // dynamic_mutex = rt_mutex_create("dmutex", RT_IPC_FLAG_PRIO);
-  // if (dynamic_mutex == RT_NULL)
-  // {
-  //     rt_kprintf("create dynamic mutex failed.\n");
-  //     return -1;
-  // }
+  dynamic_mutex = rt_mutex_create("dmutex", RT_IPC_FLAG_PRIO);
+  if (dynamic_mutex == RT_NULL)
+  {
+      rt_kprintf("create dynamic mutex failed.\n");
+      return -1;
+  }
 
   // rb = rt_ringbuffer_create(RING_BUFFER_LEN);
   // if (rb == RT_NULL)
@@ -835,6 +808,8 @@ void serial_thread_entry(void *parameter) {
   char *prBuf = ser_port->rx_buf;
   char *pwBuf = ser_port->tx_buf;
 
+
+
   while (1) {
 
     // rt_sem_control(&g_stConfig.serPort[index].rx_sem, RT_IPC_CMD_RESET,
@@ -889,25 +864,27 @@ void serial_thread_entry(void *parameter) {
 
     if (index >= 1) {
       *(prBuf + readlen) = '\0';
-      log_d("ASCII 口收到数据(%d/%d)%s", readlen, ser_port->CanRecv, prBuf);
-
+      // log_e("ASCII 口收到数据(%d/%d)%s", readlen, ser_port->CanRecv, prBuf);
       // rt_ringbuffer_put(rb, prBuf, buflen);
 
       /* 发送消息到消息队列中 */
       // result = rt_mq_send(&asc_recv_mq, prBuf, buflen);
+      //
+
+
       result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG));
 
 
-      if (result != RT_EOK) {
-        if (result == -RT_EFULL) {
-          log_e("ASCII 接收线程消息队列已满,请清空");
-        } else if (result == -RT_ERROR) {
-          log_e("msg maybe too large than max_msgs");
-        } else {
-          log_e("mq send to asc_resp_mq error unkown");
-        }
-        continue;
-      }
+      // if (result != RT_EOK) {
+      //   if (result == -RT_EFULL) {
+      //     log_e("ASCII 接收线程消息队列已满,请清空");
+      //   } else if (result == -RT_ERROR) {
+      //     log_e("msg maybe too large than max_msgs");
+      //   } else {
+      //     log_e("mq send to asc_resp_mq error unkown");
+      //   }
+      //   continue;
+      // }
 
       /* 发送串口消息到 asc_resp_mq，告诉 RTU 是谁在请求，响应的时候就响应给谁*/
       // log_i("serport index:%s",port->dev_name);

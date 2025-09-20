@@ -386,18 +386,17 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   //
 
   // check slaveaddr if is exist
-
-  uint16_t D90 = g_stConfig.rtuSys.hold[90];
-  uint16_t D91 = g_stConfig.rtuSys.hold[91];
-  uint16_t D92 = g_stConfig.rtuSys.hold[92];
-
   // uint16_t DSYS[3] = {D90, D91, D92};
 
-  uint16_t D95 = g_stConfig.rtuSys.hold[95];
+  uint16_t D90 = g_stConfig.rtuSys.hold[90-1];
+  uint16_t D91 = g_stConfig.rtuSys.hold[91-1];
+  uint16_t D92 = g_stConfig.rtuSys.hold[92-1];
+  uint16_t D95 = g_stConfig.rtuSys.hold[95-1];
 
-  log_d("slaveAddr:%d D90:%d D91:%d D92:%d", meta->slaveAddr, D90, D91, D92);
+  // log_e("slaveAddr:%d D90:%d D91:%d D92:%d D95:%d", meta->slaveAddr, D90, D91, D92,D95);
 
   switch (D95) {
+
   case 0:
     if (meta->slaveAddr != D90) {
       return RT_ENOSYS;
@@ -520,8 +519,8 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   *(pwBuf + bufLen - 1) = '\n';
   *(pwBuf + bufLen) = '\0';
 
-  log_d("上位机请求:%s", prBuf);
-  log_d("响应给上位机:%s", pwBuf);
+  log_e("上位机请求-%s", prBuf);
+  log_e("响应给上位机:%s", pwBuf);
 
 
   log_d("333333bufLen:%d start addr:%d, reg_quantity:%d, wrByteQuantity:%d",bufLen, meta->wrHead,meta->wrRegQuantity,meta->wrByteQuantity); 
@@ -561,6 +560,7 @@ rt_err_t find_frame(char *buf,rt_uint32_t len,uint8_t sof,uint8_t *eof,struct fr
   rt_uint32_t i=0,j=0;
   log_d("find frame sof:%02x,eof0:%02x,eof1:%02x",sof,eof[0],eof[1]);
 
+  ulog_hexdump("frame:", 16, buf, len);
   
   // do {
   //   rt_kprintf("%c ",*(ch+i));
@@ -581,10 +581,10 @@ rt_err_t find_frame(char *buf,rt_uint32_t len,uint8_t sof,uint8_t *eof,struct fr
     {
        if(*(ch+1) == eof[1] && arr[j].frame_start != -1 && arr[j].frame_end == -1)
       {
-        arr[j].frame_end = i +1;
-        *(buf+arr[j].frame_end) = '\0';
+        arr[j].frame_end = i+1; // 0x0D
+        // *(buf+arr[j].frame_end+1) = '\0';
         j++;//find one
-        if(j>=3) break;
+        if(j>=1) break;
       }else {
         continue;
       }
@@ -596,7 +596,9 @@ rt_err_t find_frame(char *buf,rt_uint32_t len,uint8_t sof,uint8_t *eof,struct fr
     log_w("Not found %c...%d%d frame",sof,eof[0],eof[1]);
     return -RT_ERROR;
   }
-  log_d("find %d valid frame", j);
+
+  ulog_hexdump("frame:", 16, buf, len);
+  log_e("find %d valid frame:%s", j,buf);
   return j;
 }
 
@@ -619,6 +621,7 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
   uint8_t eof[2]={0x0D,0x0A};
 
 
+
   ret = find_frame(ptrFrame,frame_len,sof,eof,arr);
 
   struct ASC_FRAME_META *meta = &ser_msg->meta;
@@ -636,6 +639,7 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
 
       meta->slaveAddr = ATOHChar(pStart + 1);
       meta->function = ATOHChar(pStart + 3);
+
 
       switch (meta->function) {
       case 3:
@@ -678,6 +682,7 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
 
       meta->calc_lrc =
           ASCII_LRC(ptrFrame + 1, frame_len - 5); // drop :(1) lrc(2) /r/n(2)
+      //
       print_asc_frame_meta(meta);
     }
     return 1;
@@ -958,8 +963,7 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
     rs485_send(port, ctx->send_buf, snd_len);
     log_d("send_len:%d", snd_len);
 
-    if (LOG_LVL == LOG_LVL_DBG)
-      ulog_hexdump("send", 16, ctx->send_buf, snd_len);
+    // ulog_hexdump("send", 16, ctx->send_buf, snd_len);
 
     rt_memset(ctx->read_buf, 0, ctx->read_bufsz);
     rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 50);
@@ -967,7 +971,7 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
       ulog_hexdump("recv", 16, ctx->read_buf, rcv_len);
 
     if (rcv_len == 8) {
-      log_i("write success");
+      // log_d("write success");
       break;
     } else {
       log_w("rs485_receive error(%d)", rcv_len);
