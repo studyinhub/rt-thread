@@ -79,10 +79,10 @@ void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type)
     {
     case NETDEV_CB_STATUS_LINK_UP:
         LOG_I("Ethernet LINK UP");
-        init_tftps(WEB_ROOT);
-        init_webnet(WEB_ROOT);
-        system("dns e0 0 8.8.8.8");
-        system("dns e0 1 114.114.114.114");
+        // init_tftps(WEB_ROOT);
+        // init_webnet(WEB_ROOT);
+        // system("dns e0 0 8.8.8.8");
+        // system("dns e0 1 114.114.114.114");
         break;
     case NETDEV_CB_STATUS_LINK_DOWN:
         LOG_W("Ethernet LINK DOWN");

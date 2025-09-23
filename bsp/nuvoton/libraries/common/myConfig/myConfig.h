@@ -23,7 +23,7 @@ extern char g_FmtTimeStr[50];
 
 #define SER_PORTS_CNT 3
 
-#define THREAD_TIMESLICE 5
+#define THREAD_TIMESLICE 1
 #define THREAD_PRIORITY 6
 #define THREAD_STACK_SIZE 1024
 

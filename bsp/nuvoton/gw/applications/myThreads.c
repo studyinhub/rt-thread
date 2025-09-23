@@ -14,8 +14,8 @@
 #include "utils.h"
 
 #define LOG_TAG "mythread"
-// #define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
 #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
+#define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
 #include <ulog.h>
 
 // https://blog.csdn.net/lu_embedded/article/details/107308740
@@ -99,6 +99,13 @@ static void thread_rtu_master_entry(void *parameter) {
 
   rt_err_t ret = RT_EOK;
 
+  ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
+                                    g_stConfig.rtuSys.scanRegCnt,
+                                    (uint16_t *)g_stConfig.rtuSys.hold);
+
+  rt_tick_t start_tick = rt_tick_get();
+  rt_tick_t timeout_tick = rt_tick_from_millisecond(1000);
+
 
   while (1) {
 
@@ -110,36 +117,33 @@ static void thread_rtu_master_entry(void *parameter) {
     
     if(rtu_send_mq.entry)
     {
-      
       struct RTU_WRITE rtu_write;
-      ret = rt_mq_recv(&rtu_send_mq, &rtu_write, sizeof(struct RTU_WRITE),
-                     RT_WAITING_FOREVER);
+      ret = rt_mq_recv(&rtu_send_mq, &rtu_write, sizeof(struct RTU_WRITE),0);
 
-      // log_e("rtu_send_mq(%d): %d %d",rtu_send_mq.entry,rtu_write.start_addr,rtu_write.wrRegQuantity);
+      if(rtu_send_mq.entry>=1)
+      log_w("rtu_send_mq(%d/%d): %d %d",rtu_send_mq.entry,rtu_send_mq.max_msgs,
+            rtu_write.start_addr,rtu_write.wrRegQuantity);
 
 
-      ret = modbus_write_regs(g_ctx, rtu_write.start_addr,
-                              rtu_write.wrRegQuantity, rtu_write.data);
+      ret = modbus_write_regs(g_ctx, rtu_write.start_addr,rtu_write.wrRegQuantity, rtu_write.data);
 
       if (ret != RT_EOK) {
         log_e("modbus_write_regs error");
       }
-
     }
 
-    // log_d("scan start:%d",g_stConfig.rtuSys.scanStAddr);
-    rt_err_t ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
-                                    g_stConfig.rtuSys.scanRegCnt,
-                                    (uint16_t *)g_stConfig.rtuSys.hold);
-    rt_thread_mdelay(1);
+    if(rtu_send_mq.entry==0 && rt_tick_get() - start_tick >= timeout_tick){
+      
+      start_tick = rt_tick_get();
+      ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
+                                      g_stConfig.rtuSys.scanRegCnt,
+                                      (uint16_t *)g_stConfig.rtuSys.hold);
 
-    // for(uint8_t i=0;i<10;i++)
-    // {
-    //   log_d("%d:%d",i,(uint16_t)g_stConfig.rtuSys.hold[i]);
-    // }
-
+      if (ret != RT_EOK) {
+        log_e("modbus_read_regs error");
+      }
+    }
     // rt_thread_delay(g_stConfig.rtuSys.scanInv);
-
 
     // if (ret != RT_EOK)
     // {
@@ -188,10 +192,6 @@ static void thread_rtu_master_entry(void *parameter) {
     //     }
     // }
     //
-
-
-
-    rt_thread_mdelay(1);
   }
 }
 
@@ -253,9 +253,8 @@ static void thread_asc_entry(void *parameter) {
   ser_msg.data_ptr = rt_malloc(27 * 100);
   ser_msg.res_ptr = rt_malloc(27 * 100);
 
-  log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
-
   if (ser_msg.data_ptr == RT_NULL || ser_msg.res_ptr == RT_NULL) {
+  // log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
     log_e("core mem malloc faild");
   }
 
@@ -278,16 +277,11 @@ static void thread_asc_entry(void *parameter) {
 
     // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
 
-    log_d("asc_recv_mq.entry:%d/%d size:%d", asc_recv_mq.entry,
-          asc_recv_mq.max_msgs, asc_recv_mq.msg_size);
-
-    log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
-
+    // log_d("asc_recv_mq.entry:%d/%d size:%d", asc_recv_mq.entry,asc_recv_mq.max_msgs, asc_recv_mq.msg_size);
+    // log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
 
     ret = rt_mq_recv(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG),
                      RT_WAITING_FOREVER);
-
-
 
     if (ret != RT_EOK) {
       if (ret == -RT_ETIMEOUT) {
@@ -310,10 +304,7 @@ static void thread_asc_entry(void *parameter) {
      //  }
 
 
-    log_e("asc_recv_mq(%d)(%d):%s",asc_recv_mq.entry,ser_msg.data_size,ser_msg.data_ptr);
-
-
-
+    // log_e("asc_recv_mq(%d/%d)(%d):%s",asc_recv_mq.entry,asc_recv_mq.max_msgs,ser_msg.data_size,ser_msg.data_ptr);
 
     // clear_message_queue(&asc_recv_mq);
     // log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
@@ -346,9 +337,10 @@ static void thread_asc_entry(void *parameter) {
     // end = clock();
     // log_d("解析完毕,用时:%dms", end - start);
     if (ret != 1 && ret != 2) {
-      log_e("parse error,no send");
+      log_e("parse error for :%s",ser_msg.data_ptr);
+      ulog_hexdump("error data:", 16, ser_msg.data_ptr, ser_msg.data_size);
+      uart_flush_rx(ser_msg.port->device);
       rt_memset(ser_msg.data_ptr, '\0', 27 * 100);
-      rt_memset(ser_msg.res_ptr, '\0', 27 * 100);
       continue;
     }
 
@@ -361,19 +353,21 @@ static void thread_asc_entry(void *parameter) {
     // print_asc_frame_meta(&ser_msg.meta);
 
     if (ret != RT_EOK) {
-      log_e("ascii_build_response error,no send");
+      log_e("ascii_build_response error,no send:");
+      rt_memset(ser_msg.res_ptr, '\0', 27 * 100);
       if (ret == RT_ENOSYS) {
         log_e("not set sys");
       }
       continue;
     }
-
+    
+    // log_e("发送给上位机:%s",ser_msg.res_ptr);
     rs485_send(ser_msg.port, ser_msg.res_ptr, ser_msg.res_size);
+
     
 
     if(ser_msg.meta.wrRegQuantity>0 || ser_msg.meta1.quantity>0)
     {
-
 
       struct RTU_WRITE rtu_write;
       rt_memset(rtu_write.data,0,sizeof(AGILE_MODBUS_MAX_WRITE_REGISTERS));
@@ -401,8 +395,8 @@ static void thread_asc_entry(void *parameter) {
           if (ser_msg.meta.wrHead >= 256) {
             offset -= 256;
           }
-          log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
-                ser_msg.meta.wrHead + offset);
+          // log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
+          //       ser_msg.meta.wrHead + offset);
         }
 
         rtu_write.start_addr = ser_msg.meta.wrHead + offset;
@@ -414,7 +408,7 @@ static void thread_asc_entry(void *parameter) {
 
         if(rt_strcmp(ser_msg.meta1.function,"WWR") == 0 )
         {
-          log_i("wrData for chct:%d",meta1->wrData);
+          log_i("wrData for chct:%d",ser_msg.meta1.wrData);
           // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
           //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
           //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
@@ -687,17 +681,20 @@ int threads_init(void) {
   //     return -1;
   // }
 
+
+  rt_thread_init(&thread_rtu_master, "rtu_master", thread_rtu_master_entry,
+                 RT_NULL, &thread_rtu_master_stack[0],
+                 sizeof(thread_rtu_master_stack), THREAD_PRIORITY + 1, THREAD_TIMESLICE);
+
+  rt_thread_startup(&thread_rtu_master);
+
+
   rt_thread_init(&thread_asc, "thread_asc", thread_asc_entry, RT_NULL,
                  &thread_asc_stack[0], sizeof(thread_asc_stack),
                  THREAD_PRIORITY, THREAD_TIMESLICE);
 
   rt_thread_startup(&thread_asc);
 
-  rt_thread_init(&thread_rtu_master, "rtu_master", thread_rtu_master_entry,
-                 RT_NULL, &thread_rtu_master_stack[0],
-                 sizeof(thread_rtu_master_stack), 8, THREAD_TIMESLICE);
-
-  rt_thread_startup(&thread_rtu_master);
 
   // rt_thread_init(&thread_rtu,
   //                "thread_rtu",
@@ -785,9 +782,9 @@ void serial_thread_entry(void *parameter) {
   char ch;
   int index = (int)parameter, i = 0, j = 0;
 
-  struct SER_PORT *ser_port = &g_stConfig.serPorts[index];
+  struct SER_PORT *port = &g_stConfig.serPorts[index];
 
-  log_d("%s read thread started\n", ser_port->dev_name);
+  log_d("%s read thread started\n", port->dev_name);
 
   int ReadDatStAdd;  // 上位机要的读的数据起始地
   int ReadDatLenth;  // 上位机要读的数据的长度
@@ -805,17 +802,50 @@ void serial_thread_entry(void *parameter) {
   uint8_t calc_lrc = 0;
 
 
-  char *prBuf = ser_port->rx_buf;
-  char *pwBuf = ser_port->tx_buf;
+  char *prBuf = port->rx_buf;
+  char *pwBuf = port->tx_buf;
 
 
+  rt_device_t dev = port->device;
+  int rc=0,len=0;
+
+  int bufsz = MAX_BUF_LENGTH;
+
+
+  ser_msg.port = port;
+
+  rt_memset(prBuf,'\0',port->CanRecv);
+
+  uart_flush_rx(dev);
 
   while (1) {
 
     // rt_sem_control(&g_stConfig.serPort[index].rx_sem, RT_IPC_CMD_RESET,
     // RT_NULL);
     // rt_sem_take(&g_stConfig.serPort[index].rx_sem, RT_WAITING_FOREVER);
-    readlen = rs485_receive(ser_port, prBuf, MAX_BUF_LENGTH, 100);
+    //
+    //
+    
+    // readlen = rs485_receive(ser_port, prBuf, MAX_BUF_LENGTH, 100);
+    
+    bufsz = MAX_BUF_LENGTH; 
+    len = 0;
+    while(1)
+    {
+      if (rt_sem_take(&port->rx_sem, RT_TICK_PER_SECOND / 100) != RT_EOK) {
+        break;
+      }
+
+      rc = rt_device_read(dev, -1, prBuf+ len, 1);
+      if (rc > 0) {
+        len += rc;
+        bufsz -= rc;
+        if (bufsz <= 0)
+          break;
+        continue;
+      }
+    }
+
     //
     // start = clock();
     // // 从第1个字节开始计时，超过 10ms，就终止本次读取
@@ -849,29 +879,41 @@ void serial_thread_entry(void *parameter) {
 
     // buflen = MAX_BUF_LENGTH - port->CanRecv; // 接收到的总字节数
 
-    if (readlen <= 0) {
-      rt_thread_mdelay(10);
+    if (len <= 0) {
+      if(rtu_send_mq.entry>=0)
+      {
+        rt_thread_mdelay(100);
+      }
+      else{
+        rt_thread_mdelay(10);
+      }
       continue;
     }
 
-    log_d("readlen:%d,%d", readlen, ser_port->CanRecv);
+    if(rtu_send_mq.entry>=0)
+    {
+      rt_thread_mdelay(10);
+    }
+    else if(rtu_send_mq.entry>=1)
+    {
+      rt_thread_mdelay(100);
+    }
+
+
+    // log_d("readlen:%d,%d", readlen, ser_port->CanRecv);
     // log_d("buflen:",buflen);
 
-    rt_memcpy(ser_msg.data_ptr, prBuf, readlen);
     // ser_msg.data_ptr = prBuf;
-    ser_msg.data_size = readlen;
-    ser_msg.port = ser_port;
+    rt_memcpy(ser_msg.data_ptr, prBuf, len);
+    ser_msg.data_size = len;
+    if(LOG_LVL == LOG_LVL_DBG)
+      ulog_hexdump("ASC RCV", 16, ser_msg.data_ptr, ser_msg.data_size);
+
 
     if (index >= 1) {
       *(prBuf + readlen) = '\0';
       // log_e("ASCII 口收到数据(%d/%d)%s", readlen, ser_port->CanRecv, prBuf);
       // rt_ringbuffer_put(rb, prBuf, buflen);
-
-      /* 发送消息到消息队列中 */
-      // result = rt_mq_send(&asc_recv_mq, prBuf, buflen);
-      //
-
-
       result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG));
 
 
@@ -923,6 +965,6 @@ void serial_thread_entry(void *parameter) {
     }
     // 不需要清理，直接覆盖即可
     // memset(port->rx_buf, 0, MAX_BUF_LENGTH);
-    ser_port->CanRecv = MAX_BUF_LENGTH;
+    port->CanRecv = MAX_BUF_LENGTH;
   }
 }
