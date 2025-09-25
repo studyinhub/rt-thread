@@ -13,8 +13,8 @@
 #include <stdint.h>
 
 #define LOG_TAG "modbusx"
-#define LOG_LVL LOG_LVL_ERROR
-// #define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
+// #define LOG_LVL LOG_LVL_ERROR
+#define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
 //
 // 0:RTU 1:ASC 232 2:ASC 485
 #define DEBUG_PORT 0
@@ -953,7 +953,7 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
   }
   
   if(len>0 && port->device_id == DEBUG_PORT && LOG_LVL == LOG_LVL_DBG)
-  ulog_hexdump("rs_485 recv", 16, buf, len);
+  ulog_hexdump("rs_485 recv", 32, buf, len);
 
   uart_flush_rx(dev);
 

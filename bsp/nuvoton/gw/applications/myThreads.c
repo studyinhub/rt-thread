@@ -7,6 +7,7 @@
 #include "rtthread.h"
 #include <rtdevice.h>
 #include <sys/types.h>
+#include <ipc/ringbuffer.h>
 
 // #include <stdio.h> // sprintf
 // #include <string.h>
@@ -14,8 +15,8 @@
 #include "utils.h"
 
 #define LOG_TAG "mythread"
-#define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
-// #define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
+// #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
+#define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
 #include <ulog.h>
 
 // https://blog.csdn.net/lu_embedded/article/details/107308740
@@ -355,6 +356,7 @@ static void thread_asc_entry(void *parameter) {
     if (ret != RT_EOK) {
       log_e("ascii_build_response error,no send:");
       rt_memset(ser_msg.res_ptr, '\0', 27 * 100);
+
       if (ret == RT_ENOSYS) {
         log_e("not set sys");
       }
@@ -777,6 +779,7 @@ void detach_threads() {}
 //
 //
 
+
 void serial_thread_entry(void *parameter) {
   int result;
   char ch;
@@ -786,47 +789,26 @@ void serial_thread_entry(void *parameter) {
 
   log_d("%s read thread started\n", port->dev_name);
 
-  int ReadDatStAdd;  // 上位机要的读的数据起始地
-  int ReadDatLenth;  // 上位机要读的数据的长度
-  int WriteDatStAdd; // 上位机要写的数据的起始地址
-  int WriteDatLenth; // 上位机要写的数据的长度
-  int WriteByteNum;  // 上位机要写的数据的字节长度=数据长度*2
   uint8_t slaveAddr; // 上位机请求中的从机地址
-  uint8_t funcode;   // 上位机请求中的功能码
-  uint8_t lrc;       // 上位机请求中的 LRC
 
-  static int f_index = 0;
   clock_t start = 0, end = 0;
-  int readlen = 0;
   int buflen = 0;
   uint8_t calc_lrc = 0;
 
-
-  char *prBuf = port->rx_buf;
-  char *pwBuf = port->tx_buf;
-
-
   rt_device_t dev = port->device;
+  uart_flush_rx(dev);
+
   int rc=0,len=0;
-
   int bufsz = MAX_BUF_LENGTH;
-
 
   ser_msg.port = port;
 
-  rt_memset(prBuf,'\0',port->CanRecv);
+  // char *prBuf = port->rx_buf;
+  // char *pwBuf = port->tx_buf;
+  // rt_memset(prBuf,'\0',port->CanRecv);
 
-  uart_flush_rx(dev);
 
   while (1) {
-
-    // rt_sem_control(&g_stConfig.serPort[index].rx_sem, RT_IPC_CMD_RESET,
-    // RT_NULL);
-    // rt_sem_take(&g_stConfig.serPort[index].rx_sem, RT_WAITING_FOREVER);
-    //
-    //
-    
-    // readlen = rs485_receive(ser_port, prBuf, MAX_BUF_LENGTH, 100);
     
     bufsz = MAX_BUF_LENGTH; 
     len = 0;
@@ -835,8 +817,7 @@ void serial_thread_entry(void *parameter) {
       if (rt_sem_take(&port->rx_sem, RT_TICK_PER_SECOND / 100) != RT_EOK) {
         break;
       }
-
-      rc = rt_device_read(dev, -1, prBuf+ len, 1);
+      rc = rt_device_read(dev, -1, ser_msg.data_ptr + len, 1);
       if (rc > 0) {
         len += rc;
         bufsz -= rc;
@@ -846,49 +827,12 @@ void serial_thread_entry(void *parameter) {
       }
     }
 
-    //
-    // start = clock();
-    // // 从第1个字节开始计时，超过 10ms，就终止本次读取
-    // while (1)
-    // {
-    //     if (port->CanRecv <= 1)
-    //         port->CanRecv = 1;
-    //
-    //     // rt_kprintf("CanRecv:%d\n", port->CanRecv);
-    //     readlen = rt_device_read(port->device, 0, prBuf + MAX_BUF_LENGTH -
-    //     port->CanRecv, port->CanRecv);
-    //     // rt_kprintf("readlen:%d\n", readlen);
-    //     if (readlen > 0)
-    //     {
-    //         start = clock(); // 收到数据，重新开始计时，返回值单位：毫秒
-    //         port->CanRecv = port->CanRecv - readlen;
-    //     }
-    //     else
-    //     {
-    //         end = clock();
-    //         rt_thread_delay(1);
-    //         // rt_kprintf("end-start:%d\r\n",end-start);
-    //         if ((end - start) > g_stConfig.serPort[index].frameInterval)
-    //         {
-    //             // log_w("%s一帧读取完毕:%d ", port->dev_name, end - start);
-    //             break;
-    //         }
-    //     }
-    // }
-    //
-
-    // buflen = MAX_BUF_LENGTH - port->CanRecv; // 接收到的总字节数
-
     if (len <= 0) {
-      if(rtu_send_mq.entry>=0)
-      {
-        rt_thread_mdelay(100);
-      }
-      else{
-        rt_thread_mdelay(10); // 10 会导致粘包
-      }
+      rt_thread_mdelay(10);
       continue;
     }
+
+    log_d("len:%d",len);
 
     if(rtu_send_mq.entry>=0)
     {
@@ -900,19 +844,11 @@ void serial_thread_entry(void *parameter) {
     }
 
 
-    // log_d("readlen:%d,%d", readlen, ser_port->CanRecv);
-    // log_d("buflen:",buflen);
-
-    // ser_msg.data_ptr = prBuf;
-    rt_memcpy(ser_msg.data_ptr, prBuf, len);
     ser_msg.data_size = len;
     if(LOG_LVL == LOG_LVL_DBG)
-      ulog_hexdump("ASC RCV", 16, ser_msg.data_ptr, ser_msg.data_size);
-
+      ulog_hexdump("ASC RCV", 32, ser_msg.data_ptr, ser_msg.data_size);
 
     if (index >= 1) {
-      *(prBuf + readlen) = '\0';
-      // log_e("ASCII 口收到数据(%d/%d)%s", readlen, ser_port->CanRecv, prBuf);
       // rt_ringbuffer_put(rb, prBuf, buflen);
       result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG));
 
@@ -945,25 +881,7 @@ void serial_thread_entry(void *parameter) {
       // 这里加一个延时会降低速度，主要是等待解析线程解析完再去清理 rx_buf
       // 优化方案，可以通过接收解析线程的邮件来处理，达到一个线程间同步的问题
       // rt_thread_delay(1000);
-    } else {
-      // RTU 口收到数据
-      // log_d("RTU 口收到数据:%d", buflen);
-
-      // RTU 收到的数据是 hex 并不是所以不能直接按照字符串来打印
-      // ulog_hexdump("rtu_recv",16,prBuf,buflen);
-      // for (int j = 0; j < buflen; j++)
-      // {
-      //     rt_kprintf("%02X ", *(prBuf + j));
-      // }
-      // rt_kprintf("\n");
-
-      // if (rt_mq_send(&rtu_recv_mq, &ser_msg, sizeof(struct SER_MSG)) !=
-      // RT_EOK)
-      // {
-      //     log_e("rt_mq_send rtu_recv_mq ERR\n");
-      // }
-    }
-    // 不需要清理，直接覆盖即可
+    } 
     // memset(port->rx_buf, 0, MAX_BUF_LENGTH);
     port->CanRecv = MAX_BUF_LENGTH;
   }
