@@ -15,7 +15,7 @@
 
 #define LOG_TAG "mythread"
 #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
-#define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
+// #define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
 #include <ulog.h>
 
 // https://blog.csdn.net/lu_embedded/article/details/107308740
@@ -885,7 +885,7 @@ void serial_thread_entry(void *parameter) {
         rt_thread_mdelay(100);
       }
       else{
-        rt_thread_mdelay(10);
+        rt_thread_mdelay(10); // 10 会导致粘包
       }
       continue;
     }
