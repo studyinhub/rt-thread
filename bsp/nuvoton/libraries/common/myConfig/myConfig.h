@@ -72,6 +72,8 @@ struct SER_MSG {
   rt_uint8_t *res_ptr;
   rt_uint32_t data_size; /* 数据块大小   */
   rt_uint32_t res_size;
+  char req_data[256];
+  char res_data[256];
   struct ASC_FRAME_META meta;
   struct CHCT_FRAME_META meta1;
   struct SER_PORT *port; /*来自端口，或者说这条消息要返回给那个 ascii 端口*/

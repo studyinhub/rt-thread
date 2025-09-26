@@ -366,8 +366,8 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   uint8_t calc_lrc = 0;
 
   struct ASC_FRAME_META *meta = &ser_msg->meta;
-  char *pwBuf = ser_msg->res_ptr;
-  char *prBuf = ser_msg->data_ptr;
+  char *pwBuf = ser_msg->res_data;
+  char *prBuf = ser_msg->req_data;
 
   // log_e("上位机请求(%d)%s", ser_msg->data_size,prBuf);
   // rt_memcpy(pwBuf, ser_msg->data_ptr, ser_msg->data_size);
@@ -376,7 +376,7 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   uint8_t errCode = 0;
   rt_err_t ret = RT_EOK;
 
-  // print_asc_frame_meta(meta);
+  print_asc_frame_meta(meta);
 
   // for(uint8_t i;i<meta->wrByteQuantity;i++)
   // {
@@ -397,7 +397,13 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   uint16_t D92 = g_stConfig.rtuSys.hold[92];
   uint16_t D95 = g_stConfig.rtuSys.hold[95];
 
-  // log_e("slaveAddr:%d D90:%d D91:%d D92:%d D95:%d", meta->slaveAddr, D90, D91, D92,D95);
+  log_d("slaveAddr:%d D90:%d D91:%d D92:%d D95:%d", meta->slaveAddr, D90, D91, D92,D95);
+
+  if(D90==0 && D91==0 && D92==0)
+  {
+    log_e("slaveAddr:%d D90:%d D91:%d D92:%d D95:%d", meta->slaveAddr, D90, D91, D92,D95);
+    return RT_ENOSYS;
+  }
 
   switch (D95) {
 
@@ -442,10 +448,10 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
     return RT_ERROR;
   }
 
-  // log_i("valid frame,to ready response:%d function:%d", meta->rdQuantity, meta->function);
+  log_i("valid frame,to ready response:%d function:%d", meta->rdQuantity, meta->function);
   // ulog_hexdump("test1",16,meta->wrBuf,4);
 
-  rt_memset(pwBuf, '\0', bytesCnt + 1);
+  rt_memset(pwBuf, '\0', 256);
 
 
   *pwBuf = ':';
@@ -605,8 +611,8 @@ rt_err_t find_frame(char *buf,rt_uint32_t len,uint8_t sof,uint8_t *eof,struct fr
 
 
 rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
-  char *ptrFrame = ser_msg->data_ptr;
-  rt_uint32_t frame_len = ser_msg->data_size;
+  char *ptrFrame = ser_msg->req_data;
+  rt_uint32_t frame_len = rt_strlen(ptrFrame);
   rt_err_t ret = RT_EOK;
 
   // meta->slaveAddr = 0;
@@ -619,8 +625,6 @@ rt_err_t parse_serial_frame(struct SER_MSG *ser_msg) {
 
   uint8_t sof=':';
   uint8_t eof[2]={0x0D,0x0A};
-
-
 
   ret = find_frame(ptrFrame,frame_len,sof,eof,arr);
 
@@ -840,22 +844,25 @@ int rs485_send(struct SER_PORT *port, uint8_t *buf, int len) {
   // RT_ASSERT(port != RT_NULL);
   // RT_ASSERT(len > 0);
 
-  if(len<=0) 
+  if(len>512) 
   {
-    log_w("no data"); 
-    return 0;
+    len=512;
+    log_w("something wrong");
   }
 
   rt_device_t dev = port->device;
 
-  // log_d("rs485_send:%s",port->dev_name);
+  log_d("rs485_send:%s:%d",port->dev_name,len);
 
   // struct SER_PORT *port = &g_stConfig.serPorts[0];
   // rt_device_write(port->device, 0, buf, len);
   // 0 : RTU,2:ASCII 485 1: ASC 232
-  if(port->device_id == DEBUG_PORT && LOG_LVL == LOG_LVL_DBG)
+  if(LOG_LVL == LOG_LVL_DBG && len >0 && len < 300)
+  // if(port->device_id == DEBUG_PORT && LOG_LVL == LOG_LVL_DBG)
   {
     ulog_hexdump("rs485_send", 16, buf, len);
+  }else{
+    log_e("send_error:%d",len);
   }
   // rt_sem_take(&port->lock_sem, RT_WAITING_FOREVER);
   write_len = rt_device_write(dev, 0, buf, len);
@@ -935,7 +942,7 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
   
     // rt_sem_control(&port->rx_sem, RT_IPC_CMD_RESET, RT_NULL);
     /* 阻塞等待接收信号量，等到中断后再次读取数据 */
-    if (rt_sem_take(&port->rx_sem, RT_TICK_PER_SECOND / 20) == RT_EOK) {
+    if (rt_sem_take(&port->rx_sem, RT_TICK_PER_SECOND / 100) == RT_EOK) {
       // log_w("读取超时%d",timeout);
       rc = rt_device_read(dev, -1, buf + len, 1);
       if (rc > 0) {
@@ -952,14 +959,13 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
 
   }
   
-  if(len>0 && port->device_id == DEBUG_PORT && LOG_LVL == LOG_LVL_DBG)
+  if(len>0 && LOG_LVL == LOG_LVL_DBG)
+  // if(len>0 && port->device_id == DEBUG_PORT && LOG_LVL == LOG_LVL_DBG)
   ulog_hexdump("rs_485 recv", 32, buf, len);
 
-  uart_flush_rx(dev);
+  // uart_flush_rx(dev);
 
   // rt_sem_release(&port->lock_sem);
-
-  // ulog_hexdump("rs485_receive", 15, buf, len);
 
   return len;
 }
@@ -976,6 +982,10 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
     // rt_memset(ctx->send_buf, 0, ctx->send_bufsz);
     snd_len = agile_modbus_serialize_write_registers(ctx, wrHead, wrRegQuantity,
                                                      (const uint16_t *)buf);
+    if(snd_len>=512){
+      snd_len = 512;
+      return -RT_EOK;
+    }
     rs485_send(port, ctx->send_buf, snd_len);
     rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, timeout);
     uart_flush_rx(port->device);
@@ -1008,7 +1018,7 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
   //
 
   snd_len = agile_modbus_serialize_read_registers(ctx, rdHead, rdQuantity);
-  // log_d("send_len:%d", snd_len);
+  log_d("send_len:%d", snd_len);
 
 
   // if (ctx->read_bufsz > 0) {

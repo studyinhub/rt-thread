@@ -73,7 +73,6 @@ ALIGN(RT_ALIGN_SIZE)
 static char thread_rtu_master_stack[1024];
 static struct rt_thread thread_rtu_master;
 
-struct SER_MSG ser_msg; 
 
 rt_mutex_t dynamic_mutex = RT_NULL;
 
@@ -141,21 +140,6 @@ static void thread_rtu_master_entry(void *parameter) {
       if (ret != RT_EOK) {
         log_e("modbus_write_regs error");
       }
-      
-      if(rt_tick_get() - start_tick >= timeout_tick_5) {
-
-        start_tick = rt_tick_get();
-        ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
-                                        g_stConfig.rtuSys.scanRegCnt,
-                                        (uint16_t *)g_stConfig.rtuSys.hold,300);
-
-        if (ret != RT_EOK) {
-          log_e("modbus_read_regs error");
-        }
-        
-      }
-
-
     }
 
     if(rtu_send_mq.entry==0 && rt_tick_get() - start_tick >= timeout_tick){
@@ -216,32 +200,8 @@ static void thread_asc_entry(void *parameter) {
   rt_uint16_t error_count = 0;
   LOG_I("thread_asc_entry");
 
+  struct SER_MSG *ser_msg; 
   clock_t start = 0, end = 0;
-
-#ifdef TEST
-  struct SER_MSG *ser_msg;
-  // struct SER_MSG* ser_msg = (struct SER_MSG*)rt_malloc(sizeof(struct
-  // SER_MSG));; ser_msg->data_size = 0; ser_msg->data_ptr = RT_NULL;
-#else
-
-  // ser_msg_rsp.data_size = 0;
-  // ser_msg_rsp.data_ptr = rt_malloc(27 * 100);
-  //
-  ser_msg.data_size = 0;
-  ser_msg.data_ptr = rt_malloc(27 * 100);
-  ser_msg.res_ptr = rt_malloc(27 * 100);
-
-  if (ser_msg.data_ptr == RT_NULL || ser_msg.res_ptr == RT_NULL) {
-  // log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
-    log_e("core mem malloc faild");
-  }
-
-  rt_memset(ser_msg.data_ptr, '\0', 27 * 100);
-  rt_memset(ser_msg.res_ptr, '\0', 27 * 100);
-
-
-
-#endif
   // log_d("mq buf(%d)",ser_msg->data_size);
   //
   rt_err_t ret;
@@ -252,14 +212,11 @@ static void thread_asc_entry(void *parameter) {
       continue;
     }
 
-
     // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
-
     // log_d("asc_recv_mq.entry:%d/%d size:%d", asc_recv_mq.entry,asc_recv_mq.max_msgs, asc_recv_mq.msg_size);
     // log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
 
-    ret = rt_mq_recv(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG),
-                     RT_WAITING_FOREVER);
+    ret = rt_mq_recv(&asc_recv_mq, (rt_ubase_t*)&ser_msg, sizeof ser_msg,RT_WAITING_FOREVER);
 
     if (ret != RT_EOK) {
       if (ret == -RT_ETIMEOUT) {
@@ -270,6 +227,8 @@ static void thread_asc_entry(void *parameter) {
       continue;
     }
 
+
+    log_d("!!!!!!!ser_msg->req_data:%s",ser_msg->req_data);
      // if (ret != RT_EOK) {
      //    if (ret == -RT_EFULL) {
      //      log_e("ASCII 接收线程消息队列已满,请清空");
@@ -310,29 +269,29 @@ static void thread_asc_entry(void *parameter) {
     // log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
     // start = clock();
     //
-    ret = parse_serial_frame(&ser_msg);
+    ret = parse_serial_frame(ser_msg);
 
     // end = clock();
     // log_d("解析完毕,用时:%dms", end - start);
     if (ret != 1 && ret != 2) {
-      log_e("parse error for :%s",ser_msg.data_ptr);
-      ulog_hexdump("error data:", 16, ser_msg.data_ptr, ser_msg.data_size);
-      uart_flush_rx(ser_msg.port->device);
-      rt_memset(ser_msg.data_ptr, '\0', 27 * 100);
+      log_e("parse error for :%s",ser_msg->req_data);
+      ulog_hexdump("error data:", 16, ser_msg->req_data, rt_strlen(ser_msg->req_data));
+      // uart_flush_rx(ser_msg->port->device);
       continue;
     }
 
+    rt_memset(ser_msg->res_data, '\0', 256);
     if(ret == 1)
-      ret = ascii_build_response(&ser_msg);
+      ret = ascii_build_response(ser_msg);
     else{
-      ret = chct_build_response(&ser_msg);
+      ret = chct_build_response(ser_msg);
     }
 
     // print_asc_frame_meta(&ser_msg.meta);
 
     if (ret != RT_EOK) {
       log_e("ascii_build_response error,no send:");
-      rt_memset(ser_msg.res_ptr, '\0', 27 * 100);
+      rt_memset(ser_msg->res_data, '\0', 256);
 
       if (ret == RT_ENOSYS) {
         log_e("not set sys");
@@ -341,25 +300,26 @@ static void thread_asc_entry(void *parameter) {
     }
     
     // log_e("发送给上位机:%s",ser_msg.res_ptr);
-    rs485_send(ser_msg.port, ser_msg.res_ptr, ser_msg.res_size);
+    rs485_send(ser_msg->port, ser_msg->res_data, ser_msg->res_size);
+  
 
-    if(ser_msg.meta.wrRegQuantity>0 || ser_msg.meta1.quantity>0)
+    if(ser_msg->meta.wrRegQuantity>0 || ser_msg->meta1.quantity>0)
     {
 
       struct RTU_WRITE rtu_write;
       rt_memset(rtu_write.data,0,sizeof(AGILE_MODBUS_MAX_WRITE_REGISTERS));
 
-      if(ser_msg.meta.wrRegQuantity>0)
+      if(ser_msg->meta.wrRegQuantity>0)
       {
-        if(ser_msg.meta.function != 16 && ser_msg.meta.function != 23)
+        if(ser_msg->meta.function != 16 && ser_msg->meta.function != 23)
         {
           continue;
         }
 
       // print_asc_frame_meta(&ser_msg.meta);
 
-        for (int i = 0; i < ser_msg.meta.wrRegQuantity; i++) {
-          rtu_write.data[i] = ATOHInt(ser_msg.meta.wrBuf + 4 * i);
+        for (int i = 0; i < ser_msg->meta.wrRegQuantity; i++) {
+          rtu_write.data[i] = ATOHInt(ser_msg->meta.wrBuf + 4 * i);
           // log_e("rtu_write.data[%d]:%02X", i,rtu_write.data[i]);
         }
 
@@ -367,33 +327,33 @@ static void thread_asc_entry(void *parameter) {
 
         if (g_stConfig.mapEnable) {
 
-          offset = g_stConfig.ascSys[ser_msg.meta.slaveAddr - 1].offset;
+          offset = g_stConfig.ascSys[ser_msg->meta.slaveAddr - 1].offset;
 
-          if (ser_msg.meta.wrHead >= 256) {
+          if (ser_msg->meta.wrHead >= 256) {
             offset -= 256;
           }
           // log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
           //       ser_msg.meta.wrHead + offset);
         }
 
-        rtu_write.start_addr = ser_msg.meta.wrHead + offset;
-        rtu_write.wrRegQuantity = ser_msg.meta.wrRegQuantity;
+        rtu_write.start_addr = ser_msg->meta.wrHead + offset;
+        rtu_write.wrRegQuantity = ser_msg->meta.wrRegQuantity;
       }
 
-      if(ser_msg.meta1.quantity>0)
+      if(ser_msg->meta1.quantity>0)
       {
 
-        if(rt_strcmp(ser_msg.meta1.function,"WWR") == 0 )
+        if(rt_strcmp(ser_msg->meta1.function,"WWR") == 0 )
         {
-          log_i("wrData for chct:%d",ser_msg.meta1.wrData);
+          log_i("wrData for chct:%d",ser_msg->meta1.wrData);
           // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
           //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
           //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
           // }
           
-          rtu_write.start_addr = ser_msg.meta1.head;
-          rtu_write.wrRegQuantity = ser_msg.meta1.quantity;
-          rtu_write.data[0] = ser_msg.meta1.wrData;
+          rtu_write.start_addr = ser_msg->meta1.head;
+          rtu_write.wrRegQuantity = ser_msg->meta1.quantity;
+          rtu_write.data[0] = ser_msg->meta1.wrData;
 
           // ret = modbus_write_regs(g_ctx, meta1->head,
           //                         meta1->quantity, &meta1->wrData);
@@ -401,30 +361,26 @@ static void thread_asc_entry(void *parameter) {
           //   log_e("modbus_write_regs error");
           // }else{
           // }
-         rt_memset(ser_msg.meta1.function,'\0',4);
+         rt_memset(ser_msg->meta1.function,'\0',4);
         }
       }
         ret = rt_mq_send(&rtu_send_mq,&rtu_write,sizeof(struct RTU_WRITE));
-        ser_msg.meta.wrByteQuantity = 0;
-        ser_msg.meta1.quantity = 0;
+        ser_msg->meta.wrByteQuantity = 0;
+        ser_msg->meta1.quantity = 0;
     }
 
-    rt_memset(ser_msg.data_ptr,'\0',ser_msg.data_size);
-
-
+_exit:
+    rt_memset(ser_msg->req_data,'\0',256);
+    rt_memset(ser_msg->res_data,'\0',256);
+    rt_mp_free(ser_msg); /* 释放内存块 */
+    ser_msg= RT_NULL;
 
     // rt_mutex_release(dynamic_mutex);
-    // if(ser_msg_rsp.data_ptr)
-    // {
-    //   rt_free(ser_msg_rsp.data_ptr);
-    // }
     // start = clock();
     // ascii_parse(&ser_msg);
     // end = clock();
     // log_d("解析完毕,用时:%dms", end - start);
    }
-  if (ser_msg.data_ptr)
-    rt_free(ser_msg.data_ptr);
 }
 
 // static void thread_asc_resp_entry(void *parameter)
@@ -661,7 +617,7 @@ int threads_init(void) {
 
   rt_thread_init(&thread_rtu_master, "rtu_master", thread_rtu_master_entry,
                  RT_NULL, &thread_rtu_master_stack[0],
-                 sizeof(thread_rtu_master_stack), THREAD_PRIORITY + 1, THREAD_TIMESLICE);
+                 sizeof(thread_rtu_master_stack), THREAD_PRIORITY, THREAD_TIMESLICE);
 
   rt_thread_startup(&thread_rtu_master);
 
@@ -851,7 +807,6 @@ void strip_head(char *buf)
     if ((first_colon != last_colon) || (buf[0] != ':')) {
         if (last_colon != NULL) {
             strcpy(buf, last_colon);  // 执行复制
-            ser_msg.data_size = rt_strlen(buf);
         }
     }
 
@@ -879,11 +834,9 @@ void strip_tail(char *buf)
         // 添加字符串结束符
         buf[len] = '\0';
         
-        ser_msg.data_size = len;
     } else {
         // 如果没有找到有效的帧，清空缓冲区
         buf[0] = '\0';
-        ser_msg.data_size = 0;
     }
 
     log_d("frame:%s", buf);
@@ -896,15 +849,12 @@ void serial_thread_entry(void *parameter) {
   struct SER_PORT *port = &g_stConfig.serPorts[index];
   log_d("index:%d %s read thread started %d\n",index, port->dev_name,port->device);
 
-  ser_msg.port = port;
- // 等待串口打开成功
 
+  log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
 
- log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
-
- rt_thread_delay(100);
- log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
- 
+  rt_thread_delay(100);
+  log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
+  
 
   uart_flush_rx(port->device);
 
@@ -912,17 +862,19 @@ void serial_thread_entry(void *parameter) {
 
   int rc=0,len = 0;
 
-  // char *prBuf = port->rx_buf;
-  // int bufsz = port->config.bufsz;
-  // rt_memset(prBuf,'\0',bufsz);
-  //
-  char *buf = ser_msg.data_ptr;
+  char *buf= port->rx_buf;
+  int bufsz = port->config.bufsz;
+  rt_memset(buf,'\0',bufsz);
 
   int stat_req_cnt = 0,total_bytes = 0;
 
+  struct SER_MSG *ser_msg; 
+
+  rt_mp_t tmp_msg_mp = rt_mp_create("temp_mp0", 10, 1024);
+
   while (1) {
     
-    len = read_asc_frame_old(port,ser_msg.data_ptr);
+    len = read_asc_frame_old(port,buf);
     // len = read_asc_frame(port,ser_msg.data_ptr);
 
     if (len <= 0) {
@@ -933,14 +885,23 @@ void serial_thread_entry(void *parameter) {
     log_d("len:%d",len);
    
     if(LOG_LVL == LOG_LVL_DBG)
-      ulog_hexdump("ASC RCV", 32, ser_msg.data_ptr, ser_msg.data_size);
+      ulog_hexdump("ASC RCV", 32, buf, len);
     
-    strip_head(ser_msg.data_ptr);
-    strip_tail(ser_msg.data_ptr);
-    ser_msg.data_size = rt_strlen(ser_msg.data_ptr);
-    log_d("ser_msg.data_size:%d",ser_msg.data_size);
+    strip_head(buf);
+    strip_tail(buf);
+    len = rt_strlen(buf);
+    if(len<=0){
+      continue;
+    }
 
-    result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG));
+    ser_msg= rt_mp_alloc(tmp_msg_mp, RT_WAITING_FOREVER);
+    ser_msg->port = port;
+    rt_memset(ser_msg->req_data,'\0',256);
+    rt_memcpy(ser_msg->req_data,buf,len);
+
+    log_d("ser_msg->req_data:%s",ser_msg->req_data);
+
+    result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof ser_msg);
     if (result != RT_EOK) {
       if (result == -RT_EFULL) {
         log_e("ASCII 接收线程消息队列已满,请清空");
@@ -950,8 +911,15 @@ void serial_thread_entry(void *parameter) {
         log_e("mq send to asc_resp_mq error unkown");
       }
     }
+    ser_msg = NULL;
 
-    // memset(port->rx_buf, 0, MAX_BUF_LENGTH);
+    memset(port->rx_buf, 0, port->config.bufsz);
     port->CanRecv = MAX_BUF_LENGTH;
   }
+
+  if (ser_msg->data_ptr)
+    rt_free(ser_msg->data_ptr);
+  if (ser_msg->res_ptr)
+    rt_free(ser_msg->res_ptr);
+
 }
