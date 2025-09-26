@@ -17,7 +17,7 @@
 #define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
 //
 // 0:RTU 1:ASC 232 2:ASC 485
-#define DEBUG_PORT 0
+#define DEBUG_PORT 2
 
 #include <ulog.h>
 
@@ -965,7 +965,7 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
 }
 
 rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
-                           uint16_t wrRegQuantity, uint16_t *buf) {
+                           uint16_t wrRegQuantity, uint16_t *buf,rt_uint32_t timeout) {
   uint16_t snd_len = 0, rcv_len = 0, rc = 0;
   struct SER_PORT *port = &g_stConfig.serPorts[0];
 
@@ -977,7 +977,7 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
     snd_len = agile_modbus_serialize_write_registers(ctx, wrHead, wrRegQuantity,
                                                      (const uint16_t *)buf);
     rs485_send(port, ctx->send_buf, snd_len);
-    rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 200);
+    rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, timeout);
     uart_flush_rx(port->device);
 
     if (rcv_len == 8) {
@@ -999,7 +999,7 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
 }
 
 rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
-                          uint16_t rdQuantity, uint16_t *buf) {
+                          uint16_t rdQuantity, uint16_t *buf,rt_uint32_t timeout) {
   uint16_t snd_len = 0, rcv_len = 0, rc = 0;
   // uint8_t temp[SCAN_READ_BYTES];
 
@@ -1017,7 +1017,7 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
   // }
 
   rs485_send(port, ctx->send_buf, snd_len);
-  rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, 300);
+  rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, timeout);
   // log_d("recv:%d bufsz:%d", rcv_len, ctx->read_bufsz);
 
   if (rcv_len != ctx->read_bufsz) {
@@ -1203,8 +1203,6 @@ int init_ser_ports() {
     log_d("new:g_stConfig.serPorts[%d].config.bufsz %d", i,
           ser_port->config.bufsz);
 
-    rt_kprintf("dev_name:%s\n", ser_port->dev_name);
-
     ser_port->device = rt_device_find(ser_port->dev_name);
 
     if (ser_port->device == NULL) {
@@ -1212,7 +1210,7 @@ int init_ser_ports() {
       return RT_ERROR;
       // goto exit;
     }
-    log_d("Find %s device_id:%d", ser_port->dev_name,ser_port->device->device_id);
+    log_d("Find %s device_id:%d", ser_port->dev_name,ser_port->device_id);
 
     // https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart
 
@@ -1254,13 +1252,18 @@ int init_ser_ports() {
     if (i == 0)
       continue;
     /* 创建 serial 线程 */
-
+     
+    if(ser_port->device_id == 1)
+    {
+      continue;
+    }
 
     rt_thread_t thread = rt_thread_create(
         thread_name, (void (*)(void *parameter))serial_thread_entry, (void *)i,
         THREAD_STACK_SIZE, THREAD_PRIORITY, THREAD_TIMESLICE);
     /* 创建成功则启动线程 */
     if (thread != RT_NULL) {
+      log_d("start %s",thread_name); 
       rt_thread_startup(thread);
     } else {
       ret = RT_ERROR;

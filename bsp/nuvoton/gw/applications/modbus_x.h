@@ -45,9 +45,9 @@ extern rt_err_t rs232_send_asc();
 extern rt_err_t rs485_send_asc();
 extern rt_err_t rs485_send_rtu();
 extern rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
-                                 uint16_t rdQuantity, uint16_t *buf);
+                                 uint16_t rdQuantity, uint16_t *buf,rt_uint32_t timeout);
 extern rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
-                                  uint16_t wrRegQuantity, uint16_t *buf);
+                                  uint16_t wrRegQuantity, uint16_t *buf,rt_uint32_t timeout);
 extern void print_asc_frame_meta(struct ASC_FRAME_META *meta);
 
 // extern uint8_t parse_rtu_frame(char *ptrFrame, rt_uint16_t frame_len);

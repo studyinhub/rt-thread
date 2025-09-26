@@ -28,7 +28,7 @@
 // 用于放邮件的内存池 */
 
 // ASCII 接收消息队列
-#define ASC_RECV_MSG_SIZE 128
+#define ASC_RECV_MSG_SIZE 2048 
 // #define ASC_SEND_MSG_SIZE 1024
 #define ASC_RECV_MQ_POOL 5120
 // #define ASC_SEND_MQ_POOL 40960
@@ -100,15 +100,25 @@ static void thread_rtu_master_entry(void *parameter) {
 
   rt_err_t ret = RT_EOK;
 
-  ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
-                                    g_stConfig.rtuSys.scanRegCnt,
-                                    (uint16_t *)g_stConfig.rtuSys.hold);
-
   rt_tick_t start_tick = rt_tick_get();
   rt_tick_t timeout_tick = rt_tick_from_millisecond(1000);
-
+  rt_tick_t timeout_tick_5 = rt_tick_from_millisecond(5000);
+  rt_thread_delay(100);
 
   while (1) {
+   
+    uint16_t D90 = g_stConfig.rtuSys.hold[90];
+    uint16_t D91 = g_stConfig.rtuSys.hold[91];
+    uint16_t D92 = g_stConfig.rtuSys.hold[92];
+
+    if(D90 ==0 && D91 ==0 && D92 ==0)
+    {
+     ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
+                                    g_stConfig.rtuSys.scanRegCnt,
+                                    (uint16_t *)g_stConfig.rtuSys.hold,300);
+      rt_thread_delay(1);
+    }
+
 
     // 总扫描开关
     if (!g_stConfig.rtuSys.scanEnable) {
@@ -126,11 +136,26 @@ static void thread_rtu_master_entry(void *parameter) {
             rtu_write.start_addr,rtu_write.wrRegQuantity);
 
 
-      ret = modbus_write_regs(g_ctx, rtu_write.start_addr,rtu_write.wrRegQuantity, rtu_write.data);
+      ret = modbus_write_regs(g_ctx, rtu_write.start_addr,rtu_write.wrRegQuantity, rtu_write.data,100);
 
       if (ret != RT_EOK) {
         log_e("modbus_write_regs error");
       }
+      
+      if(rt_tick_get() - start_tick >= timeout_tick_5) {
+
+        start_tick = rt_tick_get();
+        ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
+                                        g_stConfig.rtuSys.scanRegCnt,
+                                        (uint16_t *)g_stConfig.rtuSys.hold,300);
+
+        if (ret != RT_EOK) {
+          log_e("modbus_read_regs error");
+        }
+        
+      }
+
+
     }
 
     if(rtu_send_mq.entry==0 && rt_tick_get() - start_tick >= timeout_tick){
@@ -138,61 +163,13 @@ static void thread_rtu_master_entry(void *parameter) {
       start_tick = rt_tick_get();
       ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
                                       g_stConfig.rtuSys.scanRegCnt,
-                                      (uint16_t *)g_stConfig.rtuSys.hold);
+                                      (uint16_t *)g_stConfig.rtuSys.hold,300);
 
       if (ret != RT_EOK) {
         log_e("modbus_read_regs error");
       }
     }
-    // rt_thread_delay(g_stConfig.rtuSys.scanInv);
 
-    // if (ret != RT_EOK)
-    // {
-    //     // rt_pin_write(LED_WRK, !(rt_pin_read(LED_WRK)));
-    //     easyblink(led_wrk, -1, 500, 500);
-    //     continue;
-    // }
-    //
-    // easyblink_stop(led_wrk);
-    // eb_led_on(led_wrk);
-
-    // rc = rtu_read_holdings(
-    //     g_stConfig.rtuSys.scanStAddr,
-    //     g_stConfig.rtuSys.scanRegCnt,
-    //     g_stConfig.rtuSys.hold);
-
-
-    // for (i = 0; i < 3; i++)
-    // {
-    //     // log_d("i:%d", i, g_stConfig.scanTask[i].enable);
-    //     if (g_stConfig.scanTask[i].enable)
-    //     {
-
-    //         // log_d(
-    //         //     "n:%s,e:%d,a:%d",
-    //         //     g_stConfig.scanTask[i].name,
-    //         //     g_stConfig.scanTask[i].enable,
-    //         //     g_stConfig.scanTask[i].slaveAddr
-    //         // );
-
-    //         rc = rtu_read_holdings(
-    //             g_stConfig.scanTask[i].slaveAddr,
-    //             g_stConfig.scanTask[i].regAddr,
-    //             g_stConfig.scanTask[i].cnt,
-    //             g_stConfig.scanTask[i].hold);
-    //         // ulog_hexdump("dump_hold",16,(uint8_t
-    //         *)g_stConfig.scanTask[i].hold,g_stConfig.scanTask[i].cnt * 2);
-    //         // for(int j = 0;j<100;j++)
-    //         //     log_d("j:%d,v:%d",j,g_stConfig.scanTask[i].hold[j]);
-
-    //         // log_d("asc 地址:%d",g_stConfig.scanTask[i].hold[90+i]);
-    //         // 设置 slaveAddr 地址
-    //         // g_stConfig.scanTask[i].slaveAddr =
-    //         g_stConfig.scanTask[i].hold[90 + i];
-    //         // rt_thread_delay(g_stConfig.scanTask[i].inv);
-    //     }
-    // }
-    //
   }
 }
 
@@ -365,8 +342,6 @@ static void thread_asc_entry(void *parameter) {
     
     // log_e("发送给上位机:%s",ser_msg.res_ptr);
     rs485_send(ser_msg.port, ser_msg.res_ptr, ser_msg.res_size);
-
-    
 
     if(ser_msg.meta.wrRegQuantity>0 || ser_msg.meta1.quantity>0)
     {
@@ -779,60 +754,28 @@ void detach_threads() {}
 //
 //
 
-
-void serial_thread_entry(void *parameter) {
-  int result;
-  char ch;
-  int index = (int)parameter, i = 0, j = 0;
-
-  struct SER_PORT *port = &g_stConfig.serPorts[index];
-
-  log_d("%s read thread started\n", port->dev_name);
-
-  uint8_t slaveAddr; // 上位机请求中的从机地址
-
-  clock_t start = 0, end = 0;
-  int buflen = 0;
-  uint8_t calc_lrc = 0;
-
-  rt_device_t dev = port->device;
-  uart_flush_rx(dev);
-
-  int rc=0,len=0;
-  int bufsz = MAX_BUF_LENGTH;
-
-  ser_msg.port = port;
-
-  // char *prBuf = port->rx_buf;
-  // char *pwBuf = port->tx_buf;
-  // rt_memset(prBuf,'\0',port->CanRecv);
-
-
-  while (1) {
-    
-    bufsz = MAX_BUF_LENGTH; 
-    len = 0;
+// 帧间隔 3.5 * (1+7+1)/9600 
+static int read_asc_frame_old(struct SER_PORT *port, char* buf)
+{
+    int rc =0,len = 0;
+    int bufsz = 256;
+    char ch;
     while(1)
     {
-      if (rt_sem_take(&port->rx_sem, RT_TICK_PER_SECOND / 100) != RT_EOK) {
+      if (rt_sem_take(&port->rx_sem, 5) != RT_EOK) {
         break;
       }
-      rc = rt_device_read(dev, -1, ser_msg.data_ptr + len, 1);
+      rc = rt_device_read(port->device, -1, &ch, 1);
       if (rc > 0) {
+        *(buf+len)=ch;
         len += rc;
         bufsz -= rc;
         if (bufsz <= 0)
           break;
         continue;
       }
+      rt_sem_control(&port->rx_sem, RT_IPC_CMD_RESET, RT_NULL);
     }
-
-    if (len <= 0) {
-      rt_thread_mdelay(10);
-      continue;
-    }
-
-    log_d("len:%d",len);
 
     if(rtu_send_mq.entry>=0)
     {
@@ -840,48 +783,174 @@ void serial_thread_entry(void *parameter) {
     }
     else if(rtu_send_mq.entry>=1)
     {
-      rt_thread_mdelay(100);
+      rt_thread_mdelay(100 * rtu_send_mq.entry);
+    }
+  return len;
+}
+
+// timeout:-1 == RT_WAITING_FOREVER
+static char uart_get_char(struct SER_PORT *port,rt_int32_t timeout)
+{
+    char ch = 0;
+    rt_err_t rc = RT_EOK;
+    
+    while (rt_device_read(port->device, 0, &ch, 1) == 0)
+    {
+        rt_sem_control(&port->rx_sem, RT_IPC_CMD_RESET, RT_NULL);
+        rc = rt_sem_take(&port->rx_sem, timeout);
+        if(rc == -RT_ETIMEOUT)
+        {
+           break;
+        }
+    }
+    return ch;
+}
+
+
+static int read_asc_frame(struct SER_PORT *port,char* buf)
+{
+    char i = 0;
+    int bufsz = 128; 
+    char ch;
+
+    rt_int32_t timeout = RT_TICK_PER_SECOND/100; // 10ms
+    rt_int32_t start_time = rt_tick_get();
+    
+    while(1)
+    {
+      ch = uart_get_char(port,-1);
+      if (ch == '\0') {
+        // 检查是否超时
+        if (rt_tick_get() - start_time > timeout) {
+           break;
+        }
+        continue;
+      }
+      if (i >= bufsz - 1) {
+          buf[bufsz - 1] = '\0';
+          break;
+      }
+      buf[i++]= ch;
+      if (ch == 0x0A && i > 3 && buf[i-2] == 0x0D) {
+          buf[i] = '\0';
+          break;
+      }
+    }
+    return i;  
+}
+
+void strip_head(char *buf)
+{
+  // 1. 查找第一个和最后一个 ':'
+    char *first_colon = strchr(buf, ':');
+    char *last_colon = strrchr(buf, ':');
+
+    // 2. 判断条件：
+    //    - 至少有两个 ':'（first_colon != last_colon）
+    //    - 或者第一个字符不是 ':'
+    if ((first_colon != last_colon) || (buf[0] != ':')) {
+        if (last_colon != NULL) {
+            strcpy(buf, last_colon);  // 执行复制
+            ser_msg.data_size = rt_strlen(buf);
+        }
     }
 
+    log_d("frame:%s",buf);
+}
 
-    ser_msg.data_size = len;
+void strip_tail(char *buf)
+{
+ // 1. 查找第一个 ':'
+    char *first_colon = strchr(buf, ':');
+    
+    // 2. 查找 '\r\n'
+    char *crlf = strstr(buf, "\r\n");
+    
+    // 3. 判断条件：
+    //    - 存在 ':' 和 '\r\n'
+    //    - 且 ':' 在 '\r\n' 之前
+    if (first_colon != NULL && crlf != NULL && first_colon < crlf) {
+        // 计算要截取的长度
+        size_t len = crlf - first_colon + 2;
+        
+        // 复制数据到缓冲区开头
+        memmove(buf, first_colon, len);
+        
+        // 添加字符串结束符
+        buf[len] = '\0';
+        
+        ser_msg.data_size = len;
+    } else {
+        // 如果没有找到有效的帧，清空缓冲区
+        buf[0] = '\0';
+        ser_msg.data_size = 0;
+    }
+
+    log_d("frame:%s", buf);
+}
+
+void serial_thread_entry(void *parameter) {
+  int result;
+  int index = (int)parameter;
+
+  struct SER_PORT *port = &g_stConfig.serPorts[index];
+  log_d("index:%d %s read thread started %d\n",index, port->dev_name,port->device);
+
+  ser_msg.port = port;
+ // 等待串口打开成功
+
+
+ log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
+
+ rt_thread_delay(100);
+ log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
+ 
+
+  uart_flush_rx(port->device);
+
+  clock_t start = 0, end = 0;
+
+  int rc=0,len = 0;
+
+  // char *prBuf = port->rx_buf;
+  // int bufsz = port->config.bufsz;
+  // rt_memset(prBuf,'\0',bufsz);
+  //
+  char *buf = ser_msg.data_ptr;
+
+  int stat_req_cnt = 0,total_bytes = 0;
+
+  while (1) {
+    
+    len = read_asc_frame_old(port,ser_msg.data_ptr);
+    // len = read_asc_frame(port,ser_msg.data_ptr);
+
+    if (len <= 0) {
+      rt_thread_mdelay(10);
+      continue;
+    }
+
+    log_d("len:%d",len);
+   
     if(LOG_LVL == LOG_LVL_DBG)
       ulog_hexdump("ASC RCV", 32, ser_msg.data_ptr, ser_msg.data_size);
+    
+    strip_head(ser_msg.data_ptr);
+    strip_tail(ser_msg.data_ptr);
+    ser_msg.data_size = rt_strlen(ser_msg.data_ptr);
+    log_d("ser_msg.data_size:%d",ser_msg.data_size);
 
-    if (index >= 1) {
-      // rt_ringbuffer_put(rb, prBuf, buflen);
-      result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG));
+    result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof(struct SER_MSG));
+    if (result != RT_EOK) {
+      if (result == -RT_EFULL) {
+        log_e("ASCII 接收线程消息队列已满,请清空");
+      } else if (result == -RT_ERROR) {
+        log_e("msg maybe too large than max_msgs");
+      } else {
+        log_e("mq send to asc_resp_mq error unkown");
+      }
+    }
 
-
-      // if (result != RT_EOK) {
-      //   if (result == -RT_EFULL) {
-      //     log_e("ASCII 接收线程消息队列已满,请清空");
-      //   } else if (result == -RT_ERROR) {
-      //     log_e("msg maybe too large than max_msgs");
-      //   } else {
-      //     log_e("mq send to asc_resp_mq error unkown");
-      //   }
-      //   continue;
-      // }
-
-      /* 发送串口消息到 asc_resp_mq，告诉 RTU 是谁在请求，响应的时候就响应给谁*/
-      // log_i("serport index:%s",port->dev_name);
-      // log_i("port ddr:0x%08X",port);
-      // log_i("port ddr1:0x%08X",&g_stConfig.serPort[index]);
-      // if(rt_mb_send(&asc_resp_mb, (struct SER_PORT *)port))
-
-      // 这里还是要发送普通邮件，不能是紧急邮件，如果解析失败，需要将邮件扔掉
-      // log_d("ASCII
-      // 邮箱数量(%d/%d),port:%s",asc_resp_mb.entry,asc_resp_mb.size,port->dev_name);
-      // if (rt_mb_send(&asc_resp_mb, (rt_uint32_t)port))
-      // {
-      //     log_e("ASCII 接收线程邮件发送失败(%d)\n",asc_resp_mb.size);
-      // }
-
-      // 这里加一个延时会降低速度，主要是等待解析线程解析完再去清理 rx_buf
-      // 优化方案，可以通过接收解析线程的邮件来处理，达到一个线程间同步的问题
-      // rt_thread_delay(1000);
-    } 
     // memset(port->rx_buf, 0, MAX_BUF_LENGTH);
     port->CanRecv = MAX_BUF_LENGTH;
   }
