@@ -13,7 +13,8 @@
 #include <stdint.h>
 
 #define LOG_TAG "modbusx"
-// #define LOG_LVL LOG_LVL_ERROR
+// #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
+// #define LOG_LVL LOG_LVL_WARNING
 #define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
 //
 // 0:RTU 1:ASC 232 2:ASC 485
@@ -857,12 +858,16 @@ int rs485_send(struct SER_PORT *port, uint8_t *buf, int len) {
   // struct SER_PORT *port = &g_stConfig.serPorts[0];
   // rt_device_write(port->device, 0, buf, len);
   // 0 : RTU,2:ASCII 485 1: ASC 232
-  if(LOG_LVL == LOG_LVL_DBG && len >0 && len < 300)
-  // if(port->device_id == DEBUG_PORT && LOG_LVL == LOG_LVL_DBG)
+  // if(port->device_id == DEBUG_PORT)
+  // if(LOG_LVL == LOG_LVL_DBG && len >0 && len < 300)
+  if(LOG_LVL == LOG_LVL_DBG)
   {
-    ulog_hexdump("rs485_send", 16, buf, len);
-  }else{
-    log_e("send_error:%d",len);
+    if(len >0 && len<300)
+    {
+      ulog_hexdump("rs485_send", 16, buf, len);
+    }else{
+      log_e("send_error:%d",len);
+    }
   }
   // rt_sem_take(&port->lock_sem, RT_WAITING_FOREVER);
   write_len = rt_device_write(dev, 0, buf, len);

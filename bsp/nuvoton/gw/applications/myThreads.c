@@ -16,6 +16,7 @@
 
 #define LOG_TAG "mythread"
 // #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
+// #define LOG_LVL LOG_LVL_WARNING
 #define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
 #include <ulog.h>
 
@@ -208,7 +209,7 @@ static void thread_asc_entry(void *parameter) {
   while (1) {
     // if msg queue empty then go await
     if (!asc_recv_mq.entry) {
-      rt_thread_mdelay(1);
+      rt_thread_mdelay(10);
       continue;
     }
 
@@ -224,7 +225,7 @@ static void thread_asc_entry(void *parameter) {
       } else if (ret == -RT_ERROR) {
         log_e("rt_mq_recv error");
       }
-      continue;
+      goto _exit;
     }
 
 
@@ -277,7 +278,7 @@ static void thread_asc_entry(void *parameter) {
       log_e("parse error for :%s",ser_msg->req_data);
       ulog_hexdump("error data:", 16, ser_msg->req_data, rt_strlen(ser_msg->req_data));
       // uart_flush_rx(ser_msg->port->device);
-      continue;
+      goto _exit;
     }
 
     rt_memset(ser_msg->res_data, '\0', 256);
@@ -291,12 +292,10 @@ static void thread_asc_entry(void *parameter) {
 
     if (ret != RT_EOK) {
       log_e("ascii_build_response error,no send:");
-      rt_memset(ser_msg->res_data, '\0', 256);
-
       if (ret == RT_ENOSYS) {
         log_e("not set sys");
       }
-      continue;
+      goto _exit;
     }
     
     // log_e("发送给上位机:%s",ser_msg.res_ptr);
@@ -794,6 +793,31 @@ static int read_asc_frame(struct SER_PORT *port,char* buf)
     }
     return i;  
 }
+// :011701050002010A000000D5\r\n01050002010A00000:1212
+// 123:011701050002010A000000D5\r\n01050002010A00000:1212
+//
+rt_uint8_t strip_last(char *buf){
+ // 1. 查找第一个 ':'
+    char *first_colon = strchr(buf, ':');
+    if (first_colon == NULL) {
+        return -1;  // 没有找到 ':'
+    }
+
+    // 2. 查找 '\r\n'
+    char *crlf = strstr(first_colon, "\r\n");
+    if (crlf == NULL) {
+        return -1;  // 没有找到 '\r\n'
+    }
+
+    // 3. 计算要截取的长度（包括 '\r\n'）
+    size_t frame_len = crlf - first_colon + 2;  // +2 是因为 "\r\n" 占 2 字节
+
+    // 4. 将数据帧移动到缓冲区开头
+    memmove(buf, first_colon, frame_len);
+
+    // 5. 添加字符串结束符
+    buf[frame_len] = '\0';
+}
 
 void strip_head(char *buf)
 {
@@ -809,13 +833,12 @@ void strip_head(char *buf)
             strcpy(buf, last_colon);  // 执行复制
         }
     }
-
     log_d("frame:%s",buf);
 }
 
 void strip_tail(char *buf)
 {
- // 1. 查找第一个 ':'
+    // 1. 查找第一个 ':'
     char *first_colon = strchr(buf, ':');
     
     // 2. 查找 '\r\n'
@@ -840,6 +863,152 @@ void strip_tail(char *buf)
     }
 
     log_d("frame:%s", buf);
+}
+
+// rt_int16_t strip_raw(char *buf) {
+//     if (rt_strlen(buf) < 27) {
+//         return -1;
+//     }
+//
+//     // 查找最后一个 CRLF
+//     char *last_crlf = NULL;
+//     char *current = buf;
+//     while ((current = strstr(current, "\r\n")) != NULL) {
+//         last_crlf = current;
+//         current += 2; // 跳过已找到的 CRLF
+//     }
+//
+//     if (last_crlf == NULL) {
+//         log_w("No CRLF found");
+//         return -1;
+//     }
+//
+//     // 从最后一个 CRLF 向前查找最后一个冒号
+//     char *valid_colon = NULL;
+//     for (char *p = last_crlf; p >= buf; p--) {
+//         if (*p == ':') {
+//             valid_colon = p;
+//             break;
+//         }
+//     }
+//
+//     if (valid_colon == NULL) {
+//         log_w("No valid colon found before CRLF");
+//         return -1;
+//     }
+//
+//     // 计算帧长度（从冒号到 CRLF + 2）
+//     size_t frame_len = last_crlf - valid_colon + 2;
+//
+//     // 移动数据到缓冲区开头
+//     memmove(buf, valid_colon, frame_len);
+//
+//     // 添加字符串结束符
+//     buf[frame_len] = '\0';
+//
+//     return frame_len;
+// }
+
+rt_int16_t strip_raw(char *buf) {
+    if (rt_strlen(buf) < 27) {
+        return -1;
+    }
+
+    // 查找最后一个 CRLF
+    char *last_crlf = NULL;
+    char *current = buf;
+    while ((current = strstr(current, "\r\n")) != NULL) {
+        last_crlf = current;
+        current += 2; // 跳过已找到的 CRLF
+    }
+
+    if (last_crlf == NULL) {
+        log_w("No CRLF found");
+        return -1;
+    }
+
+    // 从最后一个 CRLF 向前查找最后一个冒号
+    char *valid_colon = NULL;
+    for (char *p = last_crlf; p >= buf; p--) {
+        if (*p == ':') {
+            valid_colon = p;
+            break;
+        }
+    }
+
+    if (valid_colon == NULL) {
+        log_w("No valid colon found before CRLF");
+        return -1;
+    }
+
+    // 计算帧长度（从冒号到 CRLF + 2）
+    size_t frame_len = last_crlf - valid_colon + 2;
+
+    // 确保只有一个 CRLF 结尾
+    if (frame_len > 2 && 
+        last_crlf > valid_colon + 2 && 
+        memcmp(last_crlf - 2, "\r\n", 2) == 0) {
+        // 如果倒数第二个也是 CRLF，则只保留一个
+        frame_len -= 2;
+        last_crlf -= 2;
+    }
+
+    // 移动数据到缓冲区开头
+    memmove(buf, valid_colon, frame_len);
+
+    // 添加字符串结束符
+    buf[frame_len] = '\0';
+
+    return frame_len;
+}
+
+int extract_first_frame(char *buf) {
+    if (buf == NULL || strlen(buf) < 2) {
+        return -1; // 缓冲区无效
+    }
+
+    // 1. 查找第一个 ':'
+    char *first_colon = strchr(buf, ':');
+    if (first_colon == NULL) {
+        return -1; // 没有找到 ':'
+    }
+
+    // 2. 查找第一个 '\CR\LF'
+    char *first_crlf = strstr(first_colon, "\r\n");
+    if (first_crlf == NULL) {
+        return -1; // 没有找到 '\CR\LF'
+    }
+
+    // 3. 计算有效数据长度（从 ':' 到 '\CR\LF' + 2）
+    size_t frame_len = first_crlf - first_colon + 2;
+
+    // 4. 移动数据到缓冲区开头
+    memmove(buf, first_colon, frame_len);
+
+    // 5. 添加字符串结束符
+    buf[frame_len] = '\0';
+
+    return frame_len;
+}
+
+rt_bool_t check_whole(char *buf,rt_int16_t len){
+  if(len <27)
+  {
+    return RT_FALSE;
+  }
+
+  if(buf[0]!=':')
+  {
+    return RT_FALSE;
+  }
+
+  if(buf[len -1] != 0x0A && buf[len-2] != 0x0D )
+  {
+    return RT_FALSE;
+  }
+
+  return RT_TRUE;
+
 }
 
 void serial_thread_entry(void *parameter) {
@@ -873,7 +1042,8 @@ void serial_thread_entry(void *parameter) {
   rt_mp_t tmp_msg_mp = rt_mp_create("temp_mp0", 10, 1024);
 
   while (1) {
-    
+    buf = port->rx_buf;
+    rt_memset(buf,'\0',bufsz); 
     len = read_asc_frame_old(port,buf);
     // len = read_asc_frame(port,ser_msg.data_ptr);
 
@@ -887,10 +1057,15 @@ void serial_thread_entry(void *parameter) {
     if(LOG_LVL == LOG_LVL_DBG)
       ulog_hexdump("ASC RCV", 32, buf, len);
     
-    strip_head(buf);
-    strip_tail(buf);
+    // strip_head(buf);
+    // strip_tail(buf);
+    // strip_last(buf);
+    
+    len = strip_raw(buf);
+    len =  extract_first_frame(buf);
+    log_d("buf:%s len:%d",buf,len);
     len = rt_strlen(buf);
-    if(len<=0){
+    if(!check_whole(buf,len)){
       continue;
     }
 
@@ -898,6 +1073,7 @@ void serial_thread_entry(void *parameter) {
     ser_msg->port = port;
     rt_memset(ser_msg->req_data,'\0',256);
     rt_memcpy(ser_msg->req_data,buf,len);
+    rt_memset(buf, '\0', port->config.bufsz);
 
     log_d("ser_msg->req_data:%s",ser_msg->req_data);
 
@@ -913,7 +1089,6 @@ void serial_thread_entry(void *parameter) {
     }
     ser_msg = NULL;
 
-    memset(port->rx_buf, 0, port->config.bufsz);
     port->CanRecv = MAX_BUF_LENGTH;
   }
 
