@@ -15,9 +15,9 @@
 #include "utils.h"
 
 #define LOG_TAG "mythread"
-// #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
+#define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
 // #define LOG_LVL LOG_LVL_WARNING
-#define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
+// #define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
 #include <ulog.h>
 
 // https://blog.csdn.net/lu_embedded/article/details/107308740
@@ -39,6 +39,9 @@
 #define MAX_ASC_RECV_MSG_QUANTITY ASC_RECV_MQ_POOL / ASC_RECV_MSG_SIZE
 // #define MAX_ASC_SEND_MSG_QUANTITY ASC_SEND_MQ_POOL/ASC_SEND_MSG_SIZE
 #define MAX_RTU_SEND_MSG_QUANTITY RTU_SEND_MQ_POOL / RTU_SEND_MSG_SIZE
+
+// 是否使用 ASC QUEUE
+// #define USE_ASC_QUEUE
 
 // ASCII 响应消息队列
 // 队列池，此池决定了，能够缓存的消息数量 4096 ，实测最多三条消息
@@ -155,11 +158,6 @@ static void thread_rtu_master_entry(void *parameter) {
   }
 }
 
-// #define TEST
-//
-//
-//
-
 
 void clear_message_queue(rt_mq_t mq)
 {
@@ -266,78 +264,11 @@ static void proc_write_request(struct SER_MSG *ser_msg){
     }
 }
 
-static void thread_asc_entry(void *parameter) {
-  rt_uint16_t error_count = 0;
-
-  struct SER_MSG *ser_msg; 
-  clock_t start = 0, end = 0;
-  // log_d("mq buf(%d)",ser_msg->data_size);
-  //
-  rt_err_t ret;
-  while (1) {
-    // if msg queue empty then go await
-    if (!asc_recv_mq.entry) {
-      rt_thread_mdelay(10);
-      continue;
-    }
-
-    // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
-    // log_d("asc_recv_mq.entry:%d/%d size:%d", asc_recv_mq.entry,asc_recv_mq.max_msgs, asc_recv_mq.msg_size);
-    // log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
-
-    ret = rt_mq_recv(&asc_recv_mq, (rt_ubase_t*)&ser_msg, sizeof ser_msg,RT_WAITING_FOREVER);
-
-    if (ret != RT_EOK) {
-      if (ret == -RT_ETIMEOUT) {
-        log_e("rt_mq_recv timeout");
-      } else if (ret == -RT_ERROR) {
-        log_e("rt_mq_recv error");
-      }
-      goto _exit;
-    }
-
+static void proc_response(struct SER_MSG *ser_msg)
+{
+    rt_err_t ret;
 
     log_d("!!!!!!!ser_msg->req_data:%s",ser_msg->req_data);
-     // if (ret != RT_EOK) {
-     //    if (ret == -RT_EFULL) {
-     //      log_e("ASCII 接收线程消息队列已满,请清空");
-     //    } else if (ret == -RT_ERROR) {
-     //      log_e("msg maybe too large than max_msgs");
-     //    } else {
-     //      log_e("mq send to asc_resp_mq error unkown");
-     //    }
-     //    continue;
-     //  }
-
-
-    // log_e("asc_recv_mq(%d/%d)(%d):%s",asc_recv_mq.entry,asc_recv_mq.max_msgs,ser_msg.data_size,ser_msg.data_ptr);
-
-    // clear_message_queue(&asc_recv_mq);
-    // log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
-    // if (LOG_LVL == LOG_LVL_DBG) {
-    //   log_d("ser_msg.data_size:%d port:%s", ser_msg.data_size,
-    //         ser_msg.port->dev_name);
-    //   ulog_hexdump("asc_recv", 16, ser_msg.data_ptr, ser_msg.data_size);
-    // }
-
-    // if(ser_msg.data_size != rt_strlen(ser_msg.data_ptr))
-    // {
-    //     log_e(":%d,%d",ser_msg.data_size,rt_strlen(ser_msg.data_ptr));
-    //     continue;
-    // }
-
-    // log_e("mq buf(%d):%s",ser_msg.data_size,ser_msg.data_ptr);
-
-    // log_d("ascii_parse(%d):",ser_msg.data_size);
-    // if (LOG_LVL == LOG_LVL_DBG) {
-    //   for (int i = 0; i < ser_msg.data_size; i++) {
-    //     rt_kprintf("%c", *(ser_msg.data_ptr + i));
-    //   }
-    // }
-
-    // log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
-    // start = clock();
-    //
     ret = parse_serial_frame(ser_msg);
 
     // end = clock();
@@ -371,11 +302,87 @@ static void thread_asc_entry(void *parameter) {
   
 
     proc_write_request(ser_msg);
+
 _exit:
     rt_memset(ser_msg->req_data,'\0',256);
     rt_memset(ser_msg->res_data,'\0',256);
     rt_mp_free(ser_msg); /* 释放内存块 */
     ser_msg= RT_NULL;
+}
+
+
+#ifdef USE_ASC_QUEUE
+static void thread_asc_entry(void *parameter) {
+  rt_uint16_t error_count = 0;
+
+  struct SER_MSG *ser_msg;
+  clock_t start = 0, end = 0;
+  // log_d("mq buf(%d)",ser_msg->data_size);
+  //
+  while (1) {
+    // if msg queue empty then go await
+    if (!asc_recv_mq.entry) {
+      rt_thread_mdelay(10);
+      continue;
+    }
+
+    rt_err_t ret;
+    ret = rt_mq_recv(&asc_recv_mq, (rt_ubase_t*)&ser_msg, sizeof ser_msg,RT_WAITING_FOREVER);
+
+    if (ret != RT_EOK) {
+      if (ret == -RT_ETIMEOUT) {
+        log_e("rt_mq_recv timeout");
+      } else if (ret == -RT_ERROR) {
+        log_e("rt_mq_recv error");
+      }
+    }
+
+    // if (ret != RT_EOK) {
+     //    if (ret == -RT_EFULL) {
+     //      log_e("ASCII 接收线程消息队列已满,请清空");
+    // clear_message_queue(&asc_recv_mq);
+     //    } else if (ret == -RT_ERROR) {
+     //      log_e("msg maybe too large than max_msgs");
+     //    } else {
+     //      log_e("mq send to asc_resp_mq error unkown");
+     //    }
+     //    continue;
+     //  }
+
+
+    // rt_mutex_take(dynamic_mutex, RT_WAITING_FOREVER);
+    // log_d("asc_recv_mq.entry:%d/%d size:%d", asc_recv_mq.entry,asc_recv_mq.max_msgs, asc_recv_mq.msg_size);
+    // log_d("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
+
+
+    // log_e("asc_recv_mq(%d/%d)(%d):%s",asc_recv_mq.entry,asc_recv_mq.max_msgs,ser_msg.data_size,ser_msg.data_ptr);
+
+    // log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
+    // if (LOG_LVL == LOG_LVL_DBG) {
+    //   log_d("ser_msg.data_size:%d port:%s", ser_msg.data_size,
+    //         ser_msg.port->dev_name);
+    //   ulog_hexdump("asc_recv", 16, ser_msg.data_ptr, ser_msg.data_size);
+    // }
+
+    // if(ser_msg.data_size != rt_strlen(ser_msg.data_ptr))
+    // {
+    //     log_e(":%d,%d",ser_msg.data_size,rt_strlen(ser_msg.data_ptr));
+    //     continue;
+    // }
+
+    // log_e("mq buf(%d):%s",ser_msg.data_size,ser_msg.data_ptr);
+
+    // log_d("ascii_parse(%d):",ser_msg.data_size);
+    // if (LOG_LVL == LOG_LVL_DBG) {
+    //   for (int i = 0; i < ser_msg.data_size; i++) {
+    //     rt_kprintf("%c", *(ser_msg.data_ptr + i));
+    //   }
+    // }
+
+    // log_i("data_ptr:%d res_ptr:%d", ser_msg.data_ptr, ser_msg.res_ptr);
+    // start = clock();
+    //
+    proc_response(ser_msg);
 
     // rt_mutex_release(dynamic_mutex);
     // start = clock();
@@ -384,6 +391,7 @@ _exit:
     // log_d("解析完毕,用时:%dms", end - start);
    }
 }
+#endif
 
 // static void thread_asc_resp_entry(void *parameter)
 // {
@@ -553,16 +561,6 @@ int threads_init(void) {
      中的消息，并根据消息来源，执行响应。
   */
 
-  result = rt_mq_init(
-      &asc_recv_mq, "asc_r", &asc_recv_pool[0], /* 内存池指向 msg_pool */
-      ASC_RECV_MSG_SIZE,                        /* 每个消息的大小是 128 字节 */
-      sizeof(asc_recv_pool), /* 内存池的大小是 msg_pool 的大小 */
-      RT_IPC_FLAG_PRIO);     /* 如果有多个线程等待，优先级大小的方法分配消息*/
-
-  if (result != RT_EOK) {
-    log_e("init asc_recv_mq queue failed.\n");
-    return -1;
-  }
 
   result = rt_mq_init(
       &rtu_send_mq, "rtu_s", &rtu_send_pool[0], /* 内存池指向 msg_pool */
@@ -623,12 +621,27 @@ int threads_init(void) {
 
   rt_thread_startup(&thread_rtu_master);
 
+  #ifdef USE_ASC_QUEUE
 
-  rt_thread_init(&thread_asc, "thread_asc", thread_asc_entry, RT_NULL,
-                 &thread_asc_stack[0], sizeof(thread_asc_stack),
-                 THREAD_PRIORITY, THREAD_TIMESLICE);
+    result = rt_mq_init(
+        &asc_recv_mq, "asc_r", &asc_recv_pool[0], /* 内存池指向 msg_pool */
+        ASC_RECV_MSG_SIZE,                        /* 每个消息的大小是 128 字节 */
+        sizeof(asc_recv_pool), /* 内存池的大小是 msg_pool 的大小 */
+        RT_IPC_FLAG_PRIO);     /* 如果有多个线程等待，优先级大小的方法分配消息*/
 
-  rt_thread_startup(&thread_asc);
+    if (result != RT_EOK) {
+      log_e("init asc_recv_mq queue failed.\n");
+      return -1;
+    }
+
+
+    rt_thread_init(&thread_asc, "thread_asc", thread_asc_entry, RT_NULL,
+                  &thread_asc_stack[0], sizeof(thread_asc_stack),
+                  THREAD_PRIORITY, THREAD_TIMESLICE);
+
+    rt_thread_startup(&thread_asc);
+
+  #endif
 
 
   // rt_thread_init(&thread_rtu,
@@ -712,7 +725,7 @@ void detach_threads() {}
 //
 //
 
-// 帧间隔 3.5 * (1+7+1)/9600 
+// 帧间隔 3.5 * (1+7+1)/9600 = 3.28ms
 static int read_asc_frame_old(struct SER_PORT *port, char* buf)
 {
     int rc =0,len = 0;
@@ -720,7 +733,7 @@ static int read_asc_frame_old(struct SER_PORT *port, char* buf)
     char ch;
     while(1)
     {
-      if (rt_sem_take(&port->rx_sem, 5) != RT_EOK) {
+      if (rt_sem_take(&port->rx_sem, 4) != RT_EOK) {
         break;
       }
       rc = rt_device_read(port->device, -1, &ch, 1);
@@ -732,7 +745,7 @@ static int read_asc_frame_old(struct SER_PORT *port, char* buf)
           break;
         continue;
       }
-      rt_sem_control(&port->rx_sem, RT_IPC_CMD_RESET, RT_NULL);
+      // rt_sem_control(&port->rx_sem, RT_IPC_CMD_RESET, RT_NULL);
     }
 
     if(rtu_send_mq.entry>=0)
@@ -1079,18 +1092,22 @@ void serial_thread_entry(void *parameter) {
 
     log_d("ser_msg->req_data:%s",ser_msg->req_data);
 
-    result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof ser_msg);
-    if (result != RT_EOK) {
-      if (result == -RT_EFULL) {
-        log_e("ASCII 接收线程消息队列已满,请清空");
-      } else if (result == -RT_ERROR) {
-        log_e("msg maybe too large than max_msgs");
-      } else {
-        log_e("mq send to asc_resp_mq error unkown");
+    #ifdef USE_ASC_QUEUE
+      result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof ser_msg);
+      if (result != RT_EOK) {
+        if (result == -RT_EFULL) {
+          log_e("ASCII 接收线程消息队列已满,请清空");
+        } else if (result == -RT_ERROR) {
+          log_e("msg maybe too large than max_msgs");
+        } else {
+          log_e("mq send to asc_resp_mq error unkown");
+        }
       }
-    }
-    ser_msg = NULL;
+    #else
+      proc_response(ser_msg);
+    #endif
 
+    ser_msg = NULL;
     port->CanRecv = MAX_BUF_LENGTH;
   }
 

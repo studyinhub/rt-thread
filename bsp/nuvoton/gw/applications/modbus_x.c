@@ -13,9 +13,9 @@
 #include <stdint.h>
 
 #define LOG_TAG "modbusx"
-// #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
+#define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
 // #define LOG_LVL LOG_LVL_WARNING
-#define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
+// #define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
 //
 // 0:RTU 1:ASC 232 2:ASC 485
 #define DEBUG_PORT 2
