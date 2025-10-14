@@ -377,7 +377,7 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   uint8_t errCode = 0;
   rt_err_t ret = RT_EOK;
 
-  print_asc_frame_meta(meta);
+  // print_asc_frame_meta(meta);
 
   // for(uint8_t i;i<meta->wrByteQuantity;i++)
   // {
@@ -398,7 +398,7 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
   uint16_t D92 = g_stConfig.rtuSys.hold[92];
   uint16_t D95 = g_stConfig.rtuSys.hold[95];
 
-  log_d("slaveAddr:%d D90:%d D91:%d D92:%d D95:%d", meta->slaveAddr, D90, D91, D92,D95);
+  // log_d("slaveAddr:%d D90:%d D91:%d D92:%d D95:%d", meta->slaveAddr, D90, D91, D92,D95);
 
   if(D90==0 && D91==0 && D92==0)
   {
@@ -449,7 +449,7 @@ rt_err_t ascii_build_response(struct SER_MSG *ser_msg) {
     return RT_ERROR;
   }
 
-  log_i("valid frame,to ready response:%d function:%d", meta->rdQuantity, meta->function);
+  // log_i("valid frame,to ready response:%d function:%d", meta->rdQuantity, meta->function);
   // ulog_hexdump("test1",16,meta->wrBuf,4);
 
   rt_memset(pwBuf, '\0', 256);
@@ -853,17 +853,16 @@ int rs485_send(struct SER_PORT *port, uint8_t *buf, int len) {
 
   rt_device_t dev = port->device;
 
-  log_d("rs485_send:%s:%d",port->dev_name,len);
-
   // struct SER_PORT *port = &g_stConfig.serPorts[0];
   // rt_device_write(port->device, 0, buf, len);
   // 0 : RTU,2:ASCII 485 1: ASC 232
-  // if(port->device_id == DEBUG_PORT)
-  // if(LOG_LVL == LOG_LVL_DBG && len >0 && len < 300)
-  if(LOG_LVL == LOG_LVL_DBG)
+  // if(LOG_LVL == LOG_LVL_DBG)
+  if(LOG_LVL == LOG_LVL_DBG && port->device_id == DEBUG_PORT)
   {
+    // log_d("rs485_send:%s:%d",port->dev_name,len);
     if(len >0 && len<300)
     {
+      log_d("resp->%s",buf);
       ulog_hexdump("rs485_send", 16, buf, len);
     }else{
       log_e("send_error:%d",len);
@@ -964,9 +963,9 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
 
   }
   
-  if(len>0 && LOG_LVL == LOG_LVL_DBG)
-  // if(len>0 && port->device_id == DEBUG_PORT && LOG_LVL == LOG_LVL_DBG)
-  ulog_hexdump("rs_485 recv", 32, buf, len);
+  // if(len>0 && LOG_LVL == LOG_LVL_DBG)
+  if(len>0 && port->device_id == DEBUG_PORT && LOG_LVL == LOG_LVL_DBG)
+    ulog_hexdump("rs_485 recv", 32, buf, len);
 
   // uart_flush_rx(dev);
 
@@ -1023,8 +1022,7 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
   //
 
   snd_len = agile_modbus_serialize_read_registers(ctx, rdHead, rdQuantity);
-  log_d("send_len:%d", snd_len);
-
+  // log_d("send_len:%d", snd_len);
 
   // if (ctx->read_bufsz > 0) {
   //   log_w("drain read_buf");

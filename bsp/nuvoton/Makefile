@@ -30,7 +30,7 @@ ram:reset
 
 flash: 
 	BUILD=release scons -j 8
-	-nutool kernel erase 
+	-nutool kernel erase
 
 reset:
 	# 加上 - 表示连接超时继续

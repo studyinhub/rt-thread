@@ -104,21 +104,18 @@ static void thread_rtu_master_entry(void *parameter) {
   rt_tick_t timeout_tick = rt_tick_from_millisecond(1000);
   rt_tick_t timeout_tick_5 = rt_tick_from_millisecond(5000);
   rt_thread_delay(100);
+  uint16_t* D90 = &g_stConfig.rtuSys.hold[90];
+  uint16_t* D91 = &g_stConfig.rtuSys.hold[91];
+  uint16_t* D92 = &g_stConfig.rtuSys.hold[92];
 
-  while (1) {
-   
-    uint16_t D90 = g_stConfig.rtuSys.hold[90];
-    uint16_t D91 = g_stConfig.rtuSys.hold[91];
-    uint16_t D92 = g_stConfig.rtuSys.hold[92];
-
-    if(D90 ==0 && D91 ==0 && D92 ==0)
-    {
-     ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
+  do {
+    ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
                                     g_stConfig.rtuSys.scanRegCnt,
                                     (uint16_t *)g_stConfig.rtuSys.hold,300);
-      rt_thread_delay(1);
-    }
+    rt_thread_mdelay(100);
+  }while(*D90 ==0 && *D91 ==0 && *D92 ==0);
 
+  while (1) {
 
     // 总扫描开关
     if (!g_stConfig.rtuSys.scanEnable) {
@@ -304,7 +301,6 @@ static void thread_asc_entry(void *parameter) {
 
     if(ser_msg->meta.wrRegQuantity>0 || ser_msg->meta1.quantity>0)
     {
-
       struct RTU_WRITE rtu_write;
       rt_memset(rtu_write.data,0,sizeof(AGILE_MODBUS_MAX_WRITE_REGISTERS));
 
@@ -363,9 +359,10 @@ static void thread_asc_entry(void *parameter) {
          rt_memset(ser_msg->meta1.function,'\0',4);
         }
       }
-        ret = rt_mq_send(&rtu_send_mq,&rtu_write,sizeof(struct RTU_WRITE));
-        ser_msg->meta.wrByteQuantity = 0;
-        ser_msg->meta1.quantity = 0;
+      log_d("send write mq"); 
+      ret = rt_mq_send(&rtu_send_mq,&rtu_write,sizeof(struct RTU_WRITE));
+      ser_msg->meta.wrByteQuantity = 0;
+      ser_msg->meta1.quantity = 0;
     }
 
 _exit:
@@ -1019,10 +1016,9 @@ void serial_thread_entry(void *parameter) {
   log_d("index:%d %s read thread started %d\n",index, port->dev_name,port->device);
 
 
-  log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
-
-  rt_thread_delay(100);
-  log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
+  // log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
+  // rt_thread_delay(100);
+  // log_d("!!!!!!%04x",port->device->flag & RT_DEVICE_FLAG_ACTIVATED);
   
 
   uart_flush_rx(port->device);
