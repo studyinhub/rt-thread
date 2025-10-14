@@ -194,9 +194,80 @@ void clear_message_queue(rt_mq_t mq)
     // rt_kprintf("Message queue cleared.\n");
 }
 
+
+static void proc_write_request(struct SER_MSG *ser_msg){
+
+    rt_err_t ret;
+    if(ser_msg->meta.wrRegQuantity>0 || ser_msg->meta1.quantity>0)
+    {
+      struct RTU_WRITE rtu_write;
+      rt_memset(rtu_write.data,0,sizeof(AGILE_MODBUS_MAX_WRITE_REGISTERS));
+
+      if(ser_msg->meta.wrRegQuantity>0)
+      {
+        if(ser_msg->meta.function != 16 && ser_msg->meta.function != 23)
+        {
+          // continue;
+          return;
+        }
+
+      // print_asc_frame_meta(&ser_msg.meta);
+
+        for (int i = 0; i < ser_msg->meta.wrRegQuantity; i++) {
+          rtu_write.data[i] = ATOHInt(ser_msg->meta.wrBuf + 4 * i);
+          // log_e("rtu_write.data[%d]:%02X", i,rtu_write.data[i]);
+        }
+
+        int16_t offset = 0; 
+
+        if (g_stConfig.mapEnable) {
+
+          offset = g_stConfig.ascSys[ser_msg->meta.slaveAddr - 1].offset;
+
+          if (ser_msg->meta.wrHead >= 256) {
+            offset -= 256;
+          }
+          // log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
+          //       ser_msg.meta.wrHead + offset);
+        }
+
+        rtu_write.start_addr = ser_msg->meta.wrHead + offset;
+        rtu_write.wrRegQuantity = ser_msg->meta.wrRegQuantity;
+      }
+
+      if(ser_msg->meta1.quantity>0)
+      {
+
+        if(rt_strcmp(ser_msg->meta1.function,"WWR") == 0 )
+        {
+          log_i("wrData for chct:%d",ser_msg->meta1.wrData);
+          // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
+          //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
+          //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
+          // }
+          
+          rtu_write.start_addr = ser_msg->meta1.head;
+          rtu_write.wrRegQuantity = ser_msg->meta1.quantity;
+          rtu_write.data[0] = ser_msg->meta1.wrData;
+
+          // ret = modbus_write_regs(g_ctx, meta1->head,
+          //                         meta1->quantity, &meta1->wrData);
+          // if (ret != RT_EOK) {
+          //   log_e("modbus_write_regs error");
+          // }else{
+          // }
+         rt_memset(ser_msg->meta1.function,'\0',4);
+        }
+      }
+      log_d("send write mq"); 
+      ret = rt_mq_send(&rtu_send_mq,&rtu_write,sizeof(struct RTU_WRITE));
+      ser_msg->meta.wrByteQuantity = 0;
+      ser_msg->meta1.quantity = 0;
+    }
+}
+
 static void thread_asc_entry(void *parameter) {
   rt_uint16_t error_count = 0;
-  LOG_I("thread_asc_entry");
 
   struct SER_MSG *ser_msg; 
   clock_t start = 0, end = 0;
@@ -299,72 +370,7 @@ static void thread_asc_entry(void *parameter) {
     rs485_send(ser_msg->port, ser_msg->res_data, ser_msg->res_size);
   
 
-    if(ser_msg->meta.wrRegQuantity>0 || ser_msg->meta1.quantity>0)
-    {
-      struct RTU_WRITE rtu_write;
-      rt_memset(rtu_write.data,0,sizeof(AGILE_MODBUS_MAX_WRITE_REGISTERS));
-
-      if(ser_msg->meta.wrRegQuantity>0)
-      {
-        if(ser_msg->meta.function != 16 && ser_msg->meta.function != 23)
-        {
-          continue;
-        }
-
-      // print_asc_frame_meta(&ser_msg.meta);
-
-        for (int i = 0; i < ser_msg->meta.wrRegQuantity; i++) {
-          rtu_write.data[i] = ATOHInt(ser_msg->meta.wrBuf + 4 * i);
-          // log_e("rtu_write.data[%d]:%02X", i,rtu_write.data[i]);
-        }
-
-        int16_t offset = 0; 
-
-        if (g_stConfig.mapEnable) {
-
-          offset = g_stConfig.ascSys[ser_msg->meta.slaveAddr - 1].offset;
-
-          if (ser_msg->meta.wrHead >= 256) {
-            offset -= 256;
-          }
-          // log_d("1wrHead:%d offset:%d,%d", ser_msg.meta.wrHead, offset,
-          //       ser_msg.meta.wrHead + offset);
-        }
-
-        rtu_write.start_addr = ser_msg->meta.wrHead + offset;
-        rtu_write.wrRegQuantity = ser_msg->meta.wrRegQuantity;
-      }
-
-      if(ser_msg->meta1.quantity>0)
-      {
-
-        if(rt_strcmp(ser_msg->meta1.function,"WWR") == 0 )
-        {
-          log_i("wrData for chct:%d",ser_msg->meta1.wrData);
-          // for (int i = 0; i < ser_msg.meta1.quantity; i++) {
-          //   rtu_wr_buf[i] = ATOHInt(ser_msg.meta1.wrData+ 4 * i);
-          //   log_d("rtu_wr_buf:%02X", rtu_wr_buf[i]);
-          // }
-          
-          rtu_write.start_addr = ser_msg->meta1.head;
-          rtu_write.wrRegQuantity = ser_msg->meta1.quantity;
-          rtu_write.data[0] = ser_msg->meta1.wrData;
-
-          // ret = modbus_write_regs(g_ctx, meta1->head,
-          //                         meta1->quantity, &meta1->wrData);
-          // if (ret != RT_EOK) {
-          //   log_e("modbus_write_regs error");
-          // }else{
-          // }
-         rt_memset(ser_msg->meta1.function,'\0',4);
-        }
-      }
-      log_d("send write mq"); 
-      ret = rt_mq_send(&rtu_send_mq,&rtu_write,sizeof(struct RTU_WRITE));
-      ser_msg->meta.wrByteQuantity = 0;
-      ser_msg->meta1.quantity = 0;
-    }
-
+    proc_write_request(ser_msg);
 _exit:
     rt_memset(ser_msg->req_data,'\0',256);
     rt_memset(ser_msg->res_data,'\0',256);
