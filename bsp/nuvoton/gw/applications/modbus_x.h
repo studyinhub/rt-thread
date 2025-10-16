@@ -24,6 +24,7 @@ struct RTU_FRAME {
   uint16_t crc;
 };
 
+// slave +  func + count+ 200 + crc*2
 #define SCAN_READ_BYTES 205
 
 extern agile_modbus_t *g_ctx;
@@ -45,9 +46,9 @@ extern rt_err_t rs232_send_asc();
 extern rt_err_t rs485_send_asc();
 extern rt_err_t rs485_send_rtu();
 extern rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
-                                 uint16_t rdQuantity, uint16_t *buf,rt_uint32_t timeout);
+                                 uint16_t rdQuantity, uint16_t *buf);
 extern rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
-                                  uint16_t wrRegQuantity, uint16_t *buf,rt_uint32_t timeout);
+                                  uint16_t wrRegQuantity, uint16_t *buf);
 extern void print_asc_frame_meta(struct ASC_FRAME_META *meta);
 
 // extern uint8_t parse_rtu_frame(char *ptrFrame, rt_uint16_t frame_len);

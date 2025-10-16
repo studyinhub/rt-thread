@@ -15,8 +15,8 @@
 #include "utils.h"
 
 #define LOG_TAG "mythread"
-#define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
-// #define LOG_LVL LOG_LVL_WARNING
+// #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
+#define LOG_LVL LOG_LVL_WARNING
 // #define LOG_LVL LOG_LVL_DBG // LOG_LVL_INFO
 #include <ulog.h>
 
@@ -46,11 +46,20 @@
 // ASCII 响应消息队列
 // 队列池，此池决定了，能够缓存的消息数量 4096 ，实测最多三条消息
 // RTU 接收响应消息队列
+
+#ifdef USE_ASC_QUEUE
 struct rt_messagequeue asc_recv_mq;
-// static struct rt_messagequeue asc_send_mq;
-struct rt_messagequeue rtu_send_mq;
 static rt_uint8_t asc_recv_pool[ASC_RECV_MQ_POOL]; // 5120/128 = 40
+// static struct rt_messagequeue asc_send_mq;
 // static rt_uint8_t asc_send_pool[ASC_SEND_MQ_POOL]; // 40960/1024 =40
+ALIGN(RT_ALIGN_SIZE)
+// static char thread_asc_stack[2048];
+static char thread_asc_stack[8972];
+static struct rt_thread thread_asc;
+#endif
+
+
+struct rt_messagequeue rtu_send_mq;
 static rt_uint8_t rtu_send_pool[RTU_SEND_MQ_POOL];
 
 // ASCII 响应消息邮箱
@@ -60,14 +69,10 @@ static rt_uint8_t rtu_send_pool[RTU_SEND_MQ_POOL];
 
 // #define MB_POLL_THREAD_PRIORITY RT_THREAD_PRIORITY_MAX - 1
 
-ALIGN(RT_ALIGN_SIZE)
-// static char thread_asc_stack[2048];
-static char thread_asc_stack[8972];
-static struct rt_thread thread_asc;
 
-ALIGN(RT_ALIGN_SIZE)
-static char thread_asc_resp_stack[2048];
-static struct rt_thread thread_asc_resp;
+// ALIGN(RT_ALIGN_SIZE)
+// static char thread_asc_resp_stack[2048];
+// static struct rt_thread thread_asc_resp;
 
 // ALIGN(RT_ALIGN_SIZE)
 // static char thread_rtu_stack[1024];
@@ -78,7 +83,7 @@ static char thread_rtu_master_stack[1024];
 static struct rt_thread thread_rtu_master;
 
 
-rt_mutex_t dynamic_mutex = RT_NULL;
+// rt_mutex_t dynamic_mutex = RT_NULL;
 
 
 struct RTU_WRITE {
@@ -104,8 +109,7 @@ static void thread_rtu_master_entry(void *parameter) {
   rt_err_t ret = RT_EOK;
 
   rt_tick_t start_tick = rt_tick_get();
-  rt_tick_t timeout_tick = rt_tick_from_millisecond(1000);
-  rt_tick_t timeout_tick_5 = rt_tick_from_millisecond(5000);
+  rt_tick_t timeout_tick = rt_tick_from_millisecond(500);
   rt_thread_delay(100);
   uint16_t* D90 = &g_stConfig.rtuSys.hold[90];
   uint16_t* D91 = &g_stConfig.rtuSys.hold[91];
@@ -114,47 +118,59 @@ static void thread_rtu_master_entry(void *parameter) {
   do {
     ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
                                     g_stConfig.rtuSys.scanRegCnt,
-                                    (uint16_t *)g_stConfig.rtuSys.hold,300);
-    rt_thread_mdelay(100);
+                                    (uint16_t *)g_stConfig.rtuSys.hold);
+    if(ret!=RT_EOK)
+    {
+      continue;
+    }
+    rt_thread_delay(10);
   }while(*D90 ==0 && *D91 ==0 && *D92 ==0);
+  
+  log_i("D90:%d,D91:%d,D92:%d,D95:%d",*D90,*D91,*D92,*D95);
+
+
+  do {
+    ret = modbus_write_regs(g_ctx,90,1,D90);
+  }while(ret!=RT_EOK);
+
 
   while (1) {
 
     // 总扫描开关
     if (!g_stConfig.rtuSys.scanEnable) {
-      rt_thread_delay(10);
+      rt_thread_delay(1);
       continue;
     }
     
+
+
     if(rtu_send_mq.entry)
     {
       struct RTU_WRITE rtu_write;
       ret = rt_mq_recv(&rtu_send_mq, &rtu_write, sizeof(struct RTU_WRITE),0);
 
-      if(rtu_send_mq.entry>=1)
-      log_w("rtu_send_mq(%d/%d): %d %d",rtu_send_mq.entry,rtu_send_mq.max_msgs,
+      if(rtu_send_mq.entry>5)
+      log_d("rtu_send_mq(%d/%d): %d %d",rtu_send_mq.entry,rtu_send_mq.max_msgs,
             rtu_write.start_addr,rtu_write.wrRegQuantity);
 
+      // 8 * 9/9600 = 0.0075
+      // 这个只是字节传输时间，没有包含 slave 数据响应时间
+      modbus_write_regs(g_ctx, rtu_write.start_addr,rtu_write.wrRegQuantity, rtu_write.data);
 
-      ret = modbus_write_regs(g_ctx, rtu_write.start_addr,rtu_write.wrRegQuantity, rtu_write.data,100);
+    }else{
+      if(rt_tick_get() - start_tick >= timeout_tick)
+      {
+          start_tick = rt_tick_get();
 
-      if (ret != RT_EOK) {
-        log_e("modbus_write_regs error");
-      }
+          // 205 * (9)/9600 = 0.192 
+          modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
+                                          g_stConfig.rtuSys.scanRegCnt,
+                                          (uint16_t *)g_stConfig.rtuSys.hold);
+
+     }
     }
 
-    if(rtu_send_mq.entry==0 && rt_tick_get() - start_tick >= timeout_tick){
-      
-      start_tick = rt_tick_get();
-      ret = modbus_read_regs(g_ctx, g_stConfig.rtuSys.scanStAddr,
-                                      g_stConfig.rtuSys.scanRegCnt,
-                                      (uint16_t *)g_stConfig.rtuSys.hold,300);
-
-      if (ret != RT_EOK) {
-        log_e("modbus_read_regs error");
-      }
-    }
-
+    rt_thread_delay(1);
   }
 }
 
@@ -322,7 +338,7 @@ static void thread_asc_entry(void *parameter) {
   while (1) {
     // if msg queue empty then go await
     if (!asc_recv_mq.entry) {
-      rt_thread_mdelay(10);
+      rt_thread_delay(10);
       continue;
     }
 
@@ -539,12 +555,12 @@ int threads_init(void) {
   //                     邮箱中的邮件数目，因为一封邮件占 4 字节 */
   //                     RT_IPC_FLAG_FIFO);   /* 采用 FIFO 方式进行线程等待 */
 
-  dynamic_mutex = rt_mutex_create("dmutex", RT_IPC_FLAG_PRIO);
-  if (dynamic_mutex == RT_NULL)
-  {
-      rt_kprintf("create dynamic mutex failed.\n");
-      return -1;
-  }
+  // dynamic_mutex = rt_mutex_create("dmutex", RT_IPC_FLAG_PRIO);
+  // if (dynamic_mutex == RT_NULL)
+  // {
+  //     rt_kprintf("create dynamic mutex failed.\n");
+  //     return -1;
+  // }
 
   // rb = rt_ringbuffer_create(RING_BUFFER_LEN);
   // if (rb == RT_NULL)
@@ -634,10 +650,10 @@ int threads_init(void) {
       return -1;
     }
 
-
     rt_thread_init(&thread_asc, "thread_asc", thread_asc_entry, RT_NULL,
                   &thread_asc_stack[0], sizeof(thread_asc_stack),
-                  THREAD_PRIORITY, THREAD_TIMESLICE);
+                  THREAD_PRIORITY-1,
+                  0); // THREAD_TIMESLICE 
 
     rt_thread_startup(&thread_asc);
 
@@ -1008,7 +1024,7 @@ int extract_first_frame(char *buf) {
 }
 
 rt_bool_t check_whole(char *buf,rt_int16_t len){
-  if(len <27)
+  if(len < 27 )
   {
     return RT_FALSE;
   }
@@ -1088,9 +1104,6 @@ void serial_thread_entry(void *parameter) {
     ser_msg->port = port;
     rt_memset(ser_msg->req_data,'\0',256);
     rt_memcpy(ser_msg->req_data,buf,len);
-    rt_memset(buf, '\0', port->config.bufsz);
-
-    log_d("ser_msg->req_data:%s",ser_msg->req_data);
 
     #ifdef USE_ASC_QUEUE
       result = rt_mq_send(&asc_recv_mq, &ser_msg, sizeof ser_msg);

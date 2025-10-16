@@ -13,8 +13,9 @@
 #include <stdint.h>
 
 #define LOG_TAG "modbusx"
-#define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
+// #define LOG_LVL LOG_LVL_ERROR // LOG_LVL_INFO
 // #define LOG_LVL LOG_LVL_WARNING
+#define LOG_LVL LOG_LVL_INFO
 // #define LOG_LVL LOG_LVL_DBG // LOG_LVL_DBG LOG_LVL_ERROR
 //
 // 0:RTU 1:ASC 232 2:ASC 485
@@ -945,7 +946,7 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
 
   
     // rt_sem_control(&port->rx_sem, RT_IPC_CMD_RESET, RT_NULL);
-    /* 阻塞等待接收信号量，等到中断后再次读取数据 */
+    /* 阻塞等待接收信号量，等到中断后再次读取数据 10ms */ 
     if (rt_sem_take(&port->rx_sem, RT_TICK_PER_SECOND / 100) == RT_EOK) {
       // log_w("读取超时%d",timeout);
       rc = rt_device_read(dev, -1, buf + len, 1);
@@ -975,15 +976,17 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
 }
 
 rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
-                           uint16_t wrRegQuantity, uint16_t *buf,rt_uint32_t timeout) {
+                           uint16_t wrRegQuantity, uint16_t *buf) {
   uint16_t snd_len = 0, rcv_len = 0, rc = 0;
   struct SER_PORT *port = &g_stConfig.serPorts[0];
 
-  uint8_t retry_times = 2;
+  rt_int8_t retry_times = 100;
+  static rt_int32_t response_timeout = 50,last_rtu_timeout = 100;
 
   do {
 
-    // rt_memset(ctx->send_buf, 0, ctx->send_bufsz);
+    rt_memset(ctx->send_buf, 0, ctx->send_bufsz);
+    rt_memset(ctx->read_buf, 0, ctx->read_bufsz);
     snd_len = agile_modbus_serialize_write_registers(ctx, wrHead, wrRegQuantity,
                                                      (const uint16_t *)buf);
     if(snd_len>=512){
@@ -991,18 +994,28 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
       return -RT_EOK;
     }
     rs485_send(port, ctx->send_buf, snd_len);
-    rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, timeout);
-    uart_flush_rx(port->device);
-
-    if (rcv_len == 8) {
-      // log_d("write success");
-      break;
+    rcv_len = rs485_receive(port, ctx->read_buf, 8, response_timeout);
+    if (rcv_len != 8) {
+      log_w("retry:%d,%d", retry_times,response_timeout);
+      uart_flush_rx(port->device);
+      if(response_timeout<100)
+      {
+       response_timeout +=1;
+       log_w("response_timeout:%d",response_timeout);
+      }
     } else {
-      log_w("write_regs rs485_receive error(%d,%d)", rcv_len,ctx->read_bufsz);
-      log_d("retry:%d \r\n", retry_times);
-      rt_thread_mdelay(1000);
+      log_d("response_timeout:%d last_rtu_timeout:%d,diff:%d",response_timeout,last_rtu_timeout,response_timeout-last_rtu_timeout);
+      if(response_timeout - last_rtu_timeout>10)
+      {
+        log_w("update timeout to %d",last_rtu_timeout);
+        response_timeout = last_rtu_timeout;
+      }else{
+        last_rtu_timeout = response_timeout;
+      }
+      // log_i("response_timeout:%d",response_timeout);
+      // log_i("write_regs rs485_receive success(%d,%d)", rcv_len,8);
+      break;
     }
-
   } while (retry_times--);
 
   if (retry_times <= 0) {
@@ -1012,44 +1025,66 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
   return RT_EOK;
 }
 
+
+
 rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
-                          uint16_t rdQuantity, uint16_t *buf,rt_uint32_t timeout) {
+                          uint16_t rdQuantity, uint16_t *buf) {
   uint16_t snd_len = 0, rcv_len = 0, rc = 0;
-  // uint8_t temp[SCAN_READ_BYTES];
 
+  rt_int8_t retry_times = 100;
   struct SER_PORT *port = &g_stConfig.serPorts[0];
+
+  static rt_int32_t response_timeout = 246,last_rtu_timeout = 300;
   // rt_device_t dev = g_stConfig.serPorts[0].device;
-  //
 
-  snd_len = agile_modbus_serialize_read_registers(ctx, rdHead, rdQuantity);
-  // log_d("send_len:%d", snd_len);
 
-  // if (ctx->read_bufsz > 0) {
-  //   log_w("drain read_buf");
-  //   rt_memset(ctx->read_buf, 0, ctx->read_bufsz);
-  // }
+  // uint8_t temp[SCAN_READ_BYTES];
+  do {
 
-  rs485_send(port, ctx->send_buf, snd_len);
-  rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, timeout);
-  // log_d("recv:%d bufsz:%d", rcv_len, ctx->read_bufsz);
+    snd_len = agile_modbus_serialize_read_registers(ctx, rdHead, rdQuantity);
+    // log_d("send_len:%d", snd_len);
 
-  if (rcv_len != ctx->read_bufsz) {
-    log_e("read_regs rs485_receive error(%d,%d)",rcv_len,ctx->read_bufsz);
-    // 抽干串口端的数据
-    uart_flush_rx(port->device);
-    return -RT_ERROR;
-  }
+    // if (ctx->read_bufsz > 0) {
+    //   log_w("drain read_buf");
+    //   rt_memset(ctx->read_buf, 0, ctx->read_bufsz);
+    // }
 
-  // if(LOG_LVL == LOG_LVL_DBG)
-  //   ulog_hexdump("recv", 16, ctx->read_buf, ctx->read_bufsz);
+    log_d("response_timeout:%d",response_timeout);
+    rs485_send(port, ctx->send_buf, snd_len);
+    rcv_len = rs485_receive(port, ctx->read_buf, ctx->read_bufsz, response_timeout);
+    // log_d("recv:%d bufsz:%d", rcv_len, ctx->read_bufsz);
 
-  rc = agile_modbus_deserialize_read_registers(g_ctx, rcv_len, (uint16_t *)buf);
-  if (rc < 0) {
-    log_e("Receive failed.%d", rc);
-    if (rc != -1)
-      LOG_W("Error code:%d", -128 - rc);
-    return -RT_ERROR;
-  }
+    if (rcv_len != ctx->read_bufsz) {
+      log_w("retry:%d,%d", retry_times,response_timeout);
+      log_e("read_regs rs485_receive error(%d,%d,%d)",rcv_len,ctx->read_bufsz,response_timeout);
+      // 抽干串口端的数据
+      uart_flush_rx(port->device);
+      if(response_timeout<300)
+      {
+        response_timeout+=1;
+        log_w("response_timeout:%d",response_timeout);
+      }
+    }else{
+      // if(LOG_LVL == LOG_LVL_DBG)
+      //   ulog_hexdump("recv", 16, ctx->read_buf, ctx->read_bufsz);
+      log_d("response_timeout:%d last_rtu_timeout:%d,diff:%d",response_timeout,last_rtu_timeout,response_timeout-last_rtu_timeout);
+      if(response_timeout-last_rtu_timeout>10)
+      {
+        log_w("update timeout to %d",last_rtu_timeout);
+        response_timeout = last_rtu_timeout;
+      }else{
+        last_rtu_timeout = response_timeout;
+      }
+      rc = agile_modbus_deserialize_read_registers(g_ctx, rcv_len, (uint16_t *)buf);
+      if (rc < 0) {
+        log_e("Receive failed.%d", rc);
+        // if (rc != -1)
+        //   log_e("Error code:%d", -128 - rc);
+      }
+      break;
+    }
+
+ } while (retry_times--);
 
   // rt_memset(ctx->read_buf, 0, ctx->read_bufsz);
   // ctx->read_bufsz += rcv_len;
@@ -1078,6 +1113,7 @@ static rt_err_t uart_tx_com(rt_device_t dev, void *buffer) {
 
 
 /* 接收数据回调函数 */
+/* 串口接收到数据后产生中断，调用此回调函数，然后发送接收信号量 */
 static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size) {
 
   // log_d("dev:%s\n", dev);
@@ -1088,17 +1124,22 @@ static rt_err_t uart_rx_ind(rt_device_t dev, rt_size_t size) {
   // log_d("size:%d\n", size);
 
   struct SER_PORT *port = NULL;
-  /* 串口接收到数据后产生中断，调用此回调函数，然后发送接收信号量 */
-  if (size > 0) {
-    for (int i = 0; i < SER_PORTS_CNT; i++) {
+  // if(size <=0) return 0;
+
+  for (int i = 0; i < SER_PORTS_CNT; i++) {
+    // rt_kprintf("port->device_id:%d dev->device_id:%d\r\n",port->device_id,dev->device_id);
+    // if (!rt_strcmp((char *)port->dev_name, dev->parent.name)) {
+    if(g_stConfig.serPorts[i].device_id == dev->device_id) {
       port = &g_stConfig.serPorts[i];
-      if (!rt_strcmp((char *)port->dev_name, dev->parent.name)) {
-        rt_sem_release(&(port->rx_sem));
-        // 与 linux 不同，这里不能直接调用 clock(),否则导致系统直接重启
-        // 这里要通过信号量通知唤起线程去读取
-      }
+      break;
     }
   }
+
+  if(port!=NULL)
+  {
+    rt_sem_release(&(port->rx_sem));
+  }
+  
   return 0;
 }
 
@@ -1223,7 +1264,8 @@ int init_ser_ports() {
       return RT_ERROR;
       // goto exit;
     }
-    log_d("Find %s device_id:%d", ser_port->dev_name,ser_port->device_id);
+    log_i("Find %s device_id:%d", ser_port->dev_name,ser_port->device_id);
+    ser_port->device->device_id = ser_port->device_id;
 
     // https://www.rt-thread.org/document/site/#/rt-thread-version/rt-thread-standard/programming-manual/device/uart/uart_v1/uart
 
@@ -1273,7 +1315,7 @@ int init_ser_ports() {
 
     rt_thread_t thread = rt_thread_create(
         thread_name, (void (*)(void *parameter))serial_thread_entry, (void *)i,
-        THREAD_STACK_SIZE, THREAD_PRIORITY, THREAD_TIMESLICE);
+        THREAD_STACK_SIZE, THREAD_PRIORITY - 1 , THREAD_TIMESLICE);
     /* 创建成功则启动线程 */
     if (thread != RT_NULL) {
       log_d("start %s",thread_name); 
