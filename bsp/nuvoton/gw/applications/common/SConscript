@@ -1,0 +1,7 @@
+# applications/common/SConscript
+from building import *
+cwd = GetCurrentDir()
+src = Glob('*.c')
+CPPPATH = [cwd, str(Dir('#'))]
+group = DefineGroup('App_Common', src, depend = [''], CPPPATH = CPPPATH)
+Return('group')

@@ -1,11 +1,22 @@
-# RT-Thread building script for component
 
+# applications/SConscript
 from building import *
 
-cwd = GetCurrentDir()
-src = Glob('*.c') + Glob('*.cpp')
-CPPPATH = [cwd, str(Dir('#'))]
+# ====================== 【全局APP选择配置】只改这里！ ======================
+# 0 = 编译 app1； 1 = 编译 app2
+CONFIG_BUILD_APP1 = 1
+# ========================================================================
 
-group = DefineGroup('Applications', src, depend = [''], CPPPATH = CPPPATH)
+common_objs = SConscript('common/SConscript')
 
-Return('group')
+
+if CONFIG_BUILD_APP1 == 0:
+    app_objs = SConscript('app1/SConscript')
+else:
+    app_objs = SConscript('app2/SConscript')
+
+# 公共模块 + 当前选中APP 一起编译
+
+objs = common_objs + app_objs
+
+Return('objs')
