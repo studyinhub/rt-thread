@@ -30,7 +30,7 @@ ram:reset
 
 flash: 
 	BUILD=release scons -j 8
-	-nutool kernel erase
+	nutool -o rtthread -a write -p all
 
 reset:
 	# 加上 - 表示连接超时继续
@@ -71,7 +71,7 @@ gpack:
 	# nuwriter $(GEN_PACK_INI)
 	-nutool -o rtthread -a pack
 	echo "重命名" $(dateSuffix)
-	@mv -f ./rtthread_pack.bin ./$(pack_file)
+	@cp -f ./rtthread_pack.bin ./$(pack_file)
 
 
 deploy:

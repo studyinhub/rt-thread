@@ -5,9 +5,6 @@
 #include <drv_gpio.h>
 #include <fal.h>
 
-#include <netdev_ipaddr.h>
-#include <netdev.h>
-
 #include "dfs_file.h"
 #include "cJSON.h"
 #include "main.h"
@@ -17,7 +14,7 @@
 #include "modbus_x.h"
 #include "myThreads.h"
 
-#include "myWebnet.h"
+#include "myEth.h"
 
 #ifdef LOG_TAG
 #undef LOG_TAG
@@ -65,39 +62,19 @@ static int set_date_time() {
 
 // INIT_PREV_EXPORT(set_date_time);
 
-#include <netdev.h> /* 包含全部的 netdev 相关操作接口函数 */
-
-struct netdev *netdev_eth = RT_NULL;
-
-void netdev_callback_eth(struct netdev *netdev, enum netdev_cb_type type) {
-  switch (type) {
-  case NETDEV_CB_STATUS_LINK_UP:
-    LOG_I("Ethernet LINK UP");
-    // init_tftps(WEB_ROOT);
-    // init_webnet(WEB_ROOT);
-    // system("dns e0 0 8.8.8.8");
-    // system("dns e0 1 114.114.114.114");
-    break;
-  case NETDEV_CB_STATUS_LINK_DOWN:
-    LOG_W("Ethernet LINK DOWN");
-    break;
-  default:
-    break;
-  }
-}
-
 static struct rt_timer timer1;
 static void cb_timer1(void *parameter) { log_d("Timer:%s", parameter); }
 
 int main(int argc, char **argv) {
   rt_err_t ret;
   // LOG_I("The current version of APP firmware is %s\n", versionString);
-  sprintf(buildtime, "%s", BUILDTIME);
+  // sprintf(buildtime, "%s", BUILDTIME);
   // fal_init();
   printVersion();
   set_date_time();
   enable_wdt();
   load_config();
+  myEth_init();
 
   init_ser_ports();
 
@@ -112,17 +89,6 @@ int main(int argc, char **argv) {
   rt_thread_t tid_m_poll = RT_NULL, tid2 = RT_NULL, tid_s_poll = RT_NULL;
 
   rt_uint32_t level;
-
-  do {
-    netdev_eth = netdev_get_by_name("e0");
-    if (netdev_eth) {
-      netdev_set_status_callback(netdev_eth, netdev_callback_eth);
-      break;
-    } else {
-      LOG_W("GET eth netdev failed,retry!");
-      rt_thread_mdelay(1000);
-    }
-  } while (netdev_eth == RT_NULL);
 
   while (1) {
     feed_wdt(1);

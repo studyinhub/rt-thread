@@ -12,7 +12,6 @@
 
 #include "tftp.h"
 
-
 #define MAX_BUF_LENGTH 1024
 
 #define MAX_CONFIG_JSON_SIZE 2048
@@ -26,17 +25,17 @@ extern char g_FmtTimeStr[50];
 #define THREAD_TIMESLICE 1
 #define THREAD_PRIORITY 6
 #define THREAD_STACK_SIZE 1024
-
 #pragma pack(4)
 struct SER_PORT {
   uint8_t device_id;
-  char dev_name[7];// uart1 uart6 RT_NAME_MAX
+  char dev_name[7];      // uart1 uart6 RT_NAME_MAX
   uint8_t slaveAddr;     // slaveAddr
   uint8_t frameInterval; // 帧间隔，9600 buadrate => 9600 / (2+9+1) < 1
   char prot[6];          // ascii,rtu
   struct serial_configure config;
   struct rt_semaphore rx_sem; // 该端口接收信号量
   struct rt_semaphore lock_sem;
+  struct rt_mutex mutex;
   rt_device_t device;          // 串口设备
   int CanRecv;                 // 可以接收的数据
   char rx_buf[MAX_BUF_LENGTH]; // 从上位机接收到的最大的 buf 大小
@@ -44,14 +43,14 @@ struct SER_PORT {
 };
 
 struct CHCT_FRAME_META {
-  uint8_t sof;// start of frame 
-  char slaveAddr[5]; // address of slave "0101" 
-  char waittime; // "A"
-  char function[4]; // "WRD"
-  uint16_t head; // "D05000"
-  uint8_t quantity; // "13"
-  int16_t wrData; // 00C8
-  uint8_t eof[2]; // Not EOF "0x03 0x0D"
+  uint8_t sof;       // start of frame
+  char slaveAddr[5]; // address of slave "0101"
+  char waittime;     // "A"
+  char function[4];  // "WRD"
+  uint16_t head;     // "D05000"
+  uint8_t quantity;  // "13"
+  int16_t wrData;    // 00C8
+  uint8_t eof[2];    // Not EOF "0x03 0x0D"
 };
 
 struct ASC_FRAME_META {

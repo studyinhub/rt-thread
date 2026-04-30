@@ -4,7 +4,7 @@ from building import *
 
 # ====================== 【全局APP选择配置】只改这里！ ======================
 # 0 = 编译 app1； 1 = 编译 app2
-CONFIG_BUILD_APP1 = 1
+CONFIG_BUILD_APP1 = 0
 # ========================================================================
 
 common_objs = SConscript('common/SConscript')

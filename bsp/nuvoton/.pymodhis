@@ -1,0 +1,186 @@
+
+# 2026-04-26 09:58:44.232485
++client.read_holding_registers address=10 unit=1 count=1
+
+# 2026-04-26 09:58:47.196048
++client.read_holding_registers address=10 unit=1 count=10
+
+# 2026-04-26 09:59:00.917414
++client.read_holding_registers address=61 unit=1 count=6
+
+# 2026-04-26 10:00:57.091455
++client.read_holding_registers address=100 unit=1 count=6
+
+# 2026-04-28 09:14:27.578601
++client.read_holding_registers address=61 unit=1 count=6
+
+# 2026-04-28 09:19:08.263798
++exit
+
+# 2026-04-28 17:41:03.415335
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-28 17:41:38.348292
++client.read_holding_registers address=13 unit=1 count=1
+
+# 2026-04-28 17:41:46.823015
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-28 17:42:16.482930
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-28 17:42:18.947091
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-28 17:42:53.276425
++client.write_register address=13 unit=1 value=0
+
+# 2026-04-28 17:44:38.936048
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-28 17:45:19.628418
++client.write_register address=13 unit=1 value=0
+
+# 2026-04-28 17:45:28.581043
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-28 17:50:24.900920
++client.write_register address=13 unit=1 value=0
+
+# 2026-04-28 17:59:35.861301
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-28 17:59:40.928589
++client.write_register address=13 unit=1 value=0
+
+# 2026-04-28 17:59:47.118284
++client.write_register address=13 unit=1 value=3
+
+# 2026-04-28 18:55:03.013487
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-28 18:55:30.161064
++client.write_register address=13 unit=1 value=0
+
+# 2026-04-28 18:55:43.880698
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-28 18:57:54.274717
++client.read_holding_registers address=100 unit=1 count=6
+
+# 2026-04-29 11:37:29.368716
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-29 11:48:53.994023
++client.write_register address=13 unit=1 value=0
+
+# 2026-04-29 11:49:07.468686
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-29 11:50:38.443311
++client.write_register address=15 unit=1 value=1
+
+# 2026-04-29 11:50:44.731812
++client.write_register address=15 unit=1 value=3
+
+# 2026-04-29 11:51:04.432402
++client.write_register address=15 unit=1 value=9
+
+# 2026-04-29 11:51:08.700216
++client.write_register address=15 unit=1 value=11
+
+# 2026-04-29 11:51:12.468983
++client.write_register address=15 unit=1 value=12
+
+# 2026-04-29 11:51:15.474862
++client.write_register address=15 unit=1 value=3
+
+# 2026-04-29 11:51:49.128565
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-29 11:55:38.280497
++client.write_register address=13 unit=1 value=3
+
+# 2026-04-29 11:55:44.983807
++client.write_register address=13 unit=1 value=9
+
+# 2026-04-29 11:55:51.335537
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-29 11:55:54.122246
++client.write_register address=13 unit=1 value=2
+
+# 2026-04-29 11:55:59.832678
++client.write_register address=13 unit=1 value=0
+
+# 2026-04-29 11:56:07.105786
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-29 11:56:10.551140
++client.write_register address=13 unit=1 value=0
+
+# 2026-04-29 12:04:50.911698
++client.write_register address=13 unit=1 value=1
+
+# 2026-04-29 12:04:56.640856
++client.write_register address=13 unit=1 value=2
+
+# 2026-04-29 12:05:00.927499
++client.write_register address=13 unit=1 value=3
+
+# 2026-04-29 12:05:06.236334
++client.write_register address=13 unit=1 value=9
+
+# 2026-04-29 12:05:33.719320
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-29 12:06:09.699111
++client.write_register unit=1 address=15 value=0
+
+# 2026-04-29 12:06:15.905072
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-29 12:06:21.546514
++client.write_register unit=1 address=13 value=0
+
+# 2026-04-29 12:06:25.512501
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-29 12:09:11.938677
++client.write_register unit=1 address=13 value=1
+
+# 2026-04-29 12:09:32.032465
++client.write_register unit=1 address=14 value=1
+
+# 2026-04-29 12:20:24.086937
++client.write_register unit=1 address=14 value=0
+
+# 2026-04-29 12:20:26.693075
++client.write_register unit=1 address=14 value=1
+
+# 2026-04-29 12:20:31.353388
++client.write_register unit=1 address=15 value=1
+
+# 2026-04-29 12:20:36.906655
++client.read_holding_registers address=13 unit=1 count=6
+
+# 2026-04-29 12:20:49.407889
++client.write_register unit=1 address=13 value=16
+
+# 2026-04-29 12:20:53.274874
++client.write_register unit=1 address=13 value=15
+
+# 2026-04-29 12:20:57.964542
++client.write_register unit=1 address=13 value=0
+
+# 2026-04-29 12:36:16.979728
++client.write_register unit=1 address=13 value=1
+
+# 2026-04-29 12:36:20.366620
++client.write_register unit=1 address=13 value=3
+
+# 2026-04-29 12:36:49.490617
++client.write_register unit=1 address=14 value=0
+
+# 2026-04-29 12:37:00.280825
++client.write_register unit=1 address=15 value=0

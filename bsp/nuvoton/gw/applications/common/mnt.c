@@ -1,14 +1,14 @@
-/**************************************************************************/ /**
-                                                                              *
-                                                                              * @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
-                                                                              *
-                                                                              * SPDX-License-Identifier: Apache-2.0
-                                                                              *
-                                                                              * Change Logs:
-                                                                              * Date            Author       Notes
-                                                                              * 2020-12-12      Wayne        First version
-                                                                              *
-                                                                              ******************************************************************************/
+/**
+ *
+ * @copyright (C) 2019 Nuvoton Technology Corp. All rights reserved.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Change Logs:
+ * Date            Author       Notes
+ * 2020-12-12      Wayne        First version
+ *
+ ******************************************************************************/
 
 #include "rtconfig.h"
 
@@ -144,6 +144,10 @@ exit_mkdir_p:
 int filesystem_init(void) {
   rt_err_t result = RT_EOK;
 
+  // dfs_mount("nand1", "/", "romfs", 0, RT_NULL);
+
+  // dfs_mount("romfs", "/", "romfs", 0, 0);
+
   // ramdisk as root
   if (!rt_device_find(RAMDISK_NAME)) {
     LOG_E("cannot find %s device", RAMDISK_NAME);
@@ -155,7 +159,7 @@ int filesystem_init(void) {
 
     /* mount ramdisk0 as root directory */
     if (dfs_mount(RAMDISK_NAME, "/", "elm", 0, RT_NULL) == 0) {
-      LOG_I("ramdisk mounted on \"/\".");
+      // LOG_I("ramdisk mounted on \"/\".");
 
       /* now you can create dir dynamically. */
       mkdir_p("/mnt", 0x777);
@@ -212,17 +216,17 @@ int filesystem_init(void) {
     RT_ASSERT(result == RT_EOK);
   }
 
-  // mkdir_p("/mnt/filesystem/webnet", 0x777);
-  // mkdir_p("/mnt/filesystem/webnet/admin", 0x777);
-  // mkdir_p("/mnt/filesystem/webnet/css", 0x777);
-  // mkdir_p("/mnt/filesystem/webnet/js", 0x777);
-  // mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
+  mkdir_p("/mnt/filesystem/webnet", 0x777);
+  mkdir_p("/mnt/filesystem/webnet/admin", 0x777);
+  mkdir_p("/mnt/filesystem/webnet/css", 0x777);
+  mkdir_p("/mnt/filesystem/webnet/js", 0x777);
+  mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
 
-  // if (dfs_mount("nand1", MOUNT_POINT_SPIFLASH0, "uffs", 0, 0) != 0)
-  // {
-  //     rt_kprintf("Failed to mount uffs on %s.\n", MOUNT_POINT_SPIFLASH0);
-  //     rt_kprintf("Try to execute 'mkfs -t uffs nand1' first, then
-  //     reboot.\n"); goto exit_filesystem_init;
+  // // uffs
+  // if (dfs_mount("romfs", MOUNT_POINT_SPIFLASH0, "romfs", 0, 0) != 0) {
+  //   rt_kprintf("Failed to mount uffs on %s.\n", MOUNT_POINT_SPIFLASH0);
+  //   rt_kprintf("Try to execute 'mkfs -t uffs nand1' first, then reboot.\n");
+  //   goto exit_filesystem_init;
   // }
   // rt_kprintf("mount flash0 with uffs type: ok\n");
 
@@ -235,6 +239,8 @@ INIT_ENV_EXPORT(filesystem_init);
 
 #if defined(BOARD_USING_STORAGE_SPIFLASH)
 int mnt_init_spiflash0(void) {
+  rt_kprintf("mnt_init_spiflash0-BOARD_USING_STORAGE_SPIFLASH!!!!!!!!!!/r/n");
+
 #if defined(PKG_USING_FAL)
   extern int fal_init_check(void);
   if (!fal_init_check())
@@ -264,12 +270,19 @@ INIT_APP_EXPORT(mnt_init_spiflash0);
 
 #if defined(BOARD_USING_STORAGE_SPINAND)
 int mnt_init_spiflash0(void) {
+  // rt_kprintf("mnt_init_spiflash0-BOARD_USING_STORAGE_SPINAND!!!!!!!!!!\r\n");
+  mkdir_p("/mnt/filesystem", 0x777);
 
-  mkdir_p("/mnt/filesystem/webnet", 0x777);
-  mkdir_p("/mnt/filesystem/webnet/admin", 0x777);
-  mkdir_p("/mnt/filesystem/webnet/css", 0x777);
-  mkdir_p("/mnt/filesystem/webnet/js", 0x777);
-  mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
+  if (dfs_mount("romfs", MOUNT_POINT_SPIFLASH0, "romfs", 0, 0) == 0) {
+    // rt_kprintf("✅ ROMFS 网页挂载成功！\n");
+  } else {
+    // rt_kprintf("❌ ROMFS 挂载失败！\n");
+  }
+  // mkdir_p("/mnt/filesystem/webnet", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet/admin", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet/css", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet/js", 0x777);
+  // mkdir_p("/mnt/filesystem/webnet/fonts", 0x777);
 }
 INIT_APP_EXPORT(mnt_init_spiflash0);
 #endif

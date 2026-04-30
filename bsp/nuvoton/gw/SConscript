@@ -1,5 +1,7 @@
 # for module compiling
 import os
+import sys
+from building import *
 Import('RTT_ROOT')
 
 cwd = str(Dir('#'))
@@ -10,5 +12,24 @@ for d in list:
     path = os.path.join(cwd, d)
     if os.path.isfile(os.path.join(path, 'SConscript')):
         objs = objs + SConscript(os.path.join(d, 'SConscript'))
+
+
+romfs_dir   = os.path.join(cwd, 'romfs')
+romfs_c     = os.path.join(cwd, 'romfs.c')
+mkromfs     = os.path.join(RTT_ROOT, 'tools/mkromfs.py')
+
+# 自动调用 mkromfs.py 生成 romfs.c（mac/Windows通用）
+if os.path.exists(romfs_dir):
+    print("-------------------------------------------------")
+    print("ROMFS: 自动打包网页文件...")
+    print("-------------------------------------------------")
+    
+    python = sys.executable
+    os.system(f'"{python}" "{mkromfs}" "{romfs_dir}" "{romfs_c}"')
+
+# 把 romfs.c 加入编译
+if os.path.exists(romfs_c):
+    objs += DefineGroup('ROMFS', [romfs_c],depend = [''], CPPPATH=[cwd])
+
 
 Return('objs')

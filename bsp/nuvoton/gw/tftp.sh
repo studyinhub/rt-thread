@@ -43,7 +43,7 @@ function tALL() {
     echo ${file}
     filename=${file##*/}
     echo ${filename}
-    curl -T ./${file} tftp://${TARGET_IP}/${file}
+    curl -T ./${file} tftp://${TARGET_IP}/webnet/${file}
   done
 }
 

@@ -25,7 +25,6 @@ struct RTU_FRAME {
 };
 
 // slave +  func + count+ 200 + crc*2
-#define SCAN_READ_BYTES 205
 
 extern agile_modbus_t *g_ctx;
 
@@ -36,7 +35,7 @@ extern int rs485_send(struct SER_PORT *port, uint8_t *buf, int len);
 extern int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz,
                          int timeout);
 
-extern void uart_flush_rx(struct rt_device* dev);
+extern void uart_flush_rx(struct rt_device *dev);
 
 extern rt_err_t parse_serial_frame(struct SER_MSG *ser_msg);
 extern rt_err_t ascii_parse(struct SER_MSG *ser_msg);

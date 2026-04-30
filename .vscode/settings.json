@@ -2,8 +2,28 @@
     "python.pythonPath": "/usr/local/Cellar/python@3.9/3.9.1/Frameworks/Python.framework/Versions/3.9/Python",
     "RTT_Studio.Build.Parallel_Jobs": "8",
     "files.associations": {
+        "*.conf": "yaml",
         "*.html": "html",
-        "rtdevice.h": "c"
+        "rtdevice.h": "c",
+        "msh.h": "c",
+        "rtthread.h": "c",
+        "wbu.h": "c",
+        "ios": "cpp",
+        "ulog.h": "c",
+        "myconfig.h": "c",
+        "__functional_base": "c",
+        "array": "c",
+        "istream": "c",
+        "locale": "c",
+        "memory": "c",
+        "span": "c",
+        "tuple": "c",
+        "utility": "c",
+        "variant": "c",
+        "*.tcc": "c",
+        "format": "c",
+        "functional": "c",
+        "myserial.h": "c"
     },
     "search.useIgnoreFiles": false
 }
