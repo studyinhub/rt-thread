@@ -32,3 +32,5 @@ extern rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t rdHead,
 
 extern rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
                                   uint16_t wrRegQuantity, uint16_t *buf);
+
+extern void rtu_master_init(void);

@@ -17,6 +17,8 @@ agile_modbus_t *g_ctx = &g_ctx_rtu._ctx;
 uint8_t ctx_send_buf[AGILE_MODBUS_MAX_ADU_LENGTH];
 uint8_t ctx_read_buf[SCAN_READ_BYTES]; // AGILE_MODBUS_MAX_ADU_LENGTH
 
+rt_mutex_t modbus_mutex;
+
 rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
                            uint16_t wrRegQuantity, uint16_t *buf) {
   uint16_t snd_len = 0, rcv_len = 0, rc = 0;
@@ -24,6 +26,8 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
 
   rt_int8_t retry_times = 2;
   static rt_int32_t response_timeout = 100, last_rtu_timeout = 100;
+
+  rt_mutex_take(modbus_mutex, RT_WAITING_FOREVER);
 
   do {
 
@@ -41,8 +45,8 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
     rs485_send(port, ctx->send_buf, snd_len);
     rcv_len = rs485_receive(port, ctx->read_buf, 8, response_timeout);
     // log_d("rcv_len:%d", rcv_len);
+    uart_flush_rx(port->device);
     break;
-
     if (rcv_len != 8) {
       log_w("retry:%d,%d", retry_times, response_timeout);
       uart_flush_rx(port->device);
@@ -51,16 +55,18 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
         log_w("response_timeout:%d", response_timeout);
       }
     } else {
-      log_d("response_timeout:%d last_rtu_timeout:%d,diff:%d", response_timeout,
-            last_rtu_timeout, response_timeout - last_rtu_timeout);
-      if (response_timeout - last_rtu_timeout > 10) {
-        log_w("update timeout to %d", last_rtu_timeout);
-        response_timeout = last_rtu_timeout;
-      } else {
-        last_rtu_timeout = response_timeout;
-      }
+      // log_d("response_timeout:%d last_rtu_timeout:%d,diff:%d",
+      // response_timeout,
+      //       last_rtu_timeout, response_timeout - last_rtu_timeout);
+      // if (response_timeout - last_rtu_timeout > 10) {
+      //   log_w("update timeout to %d", last_rtu_timeout);
+      //   response_timeout = last_rtu_timeout;
+      // } else {
+      //   last_rtu_timeout = response_timeout;
+      // }
       // log_i("response_timeout:%d",response_timeout);
       // log_i("write_regs rs485_receive success(%d,%d)", rcv_len,8);
+
       break;
     }
   } while (retry_times--);
@@ -69,15 +75,20 @@ rt_err_t modbus_write_regs(agile_modbus_t *ctx, uint16_t wrHead,
     return -RT_ERROR;
   }
 
+  rt_mutex_release(modbus_mutex);
+
   return RT_EOK;
 }
 
 rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t start_addr,
                           uint16_t quantity, uint16_t *buf, uint16_t buf_len) {
+
   uint16_t snd_len = 0, rcv_len = 0, read_len = 0, rc = 0;
   uint16_t current_addr = start_addr; // 当前读取的起始地址
   uint16_t remaining = quantity;      // 剩余待读取的数量
   uint16_t *current_buf_ptr = buf;    // 当前写入数据的缓冲区指针
+
+  rt_mutex_take(modbus_mutex, RT_WAITING_FOREVER);
 
   /* 1. 基础参数检查 */
   if (quantity > buf_len) {
@@ -106,8 +117,7 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t start_addr,
     }
     /* 2.3 动态计算超时时间  */
     rt_int32_t response_timeout = (read_once * 2 + 5) * 5;
-    if (response_timeout < 246)
-      response_timeout = 246;
+
     /* 2.4 单包读取的重试循环 */
     rt_int8_t retry_times = 3;
     rt_bool_t read_success = RT_FALSE;
@@ -121,7 +131,7 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t start_addr,
       snd_len =
           agile_modbus_serialize_read_registers(ctx, current_addr, read_once);
       if (snd_len != 8) {
-        log_w("Serialize error, len=%d", snd_len);
+        // log_w("Serialize error, len=%d", snd_len);
         rt_thread_mdelay(10);
         continue;
       }
@@ -172,6 +182,19 @@ rt_err_t modbus_read_regs(agile_modbus_t *ctx, uint16_t start_addr,
   /* 3. 全部读取完成 */
   rt_memset(ctx->read_buf, 0, ctx->read_bufsz);
   // log_d("Modbus read success: Total %d regs.", quantity);
+  rt_mutex_release(modbus_mutex);
 
   return RT_EOK;
+}
+
+void rtu_master_init(void) {
+  // 13*16 - 3 =  208
+  //
+  // agile_modbus_rtu_t ctx_rtu;
+  // agile_modbus_t *ctx = &ctx_rtu._ctx;
+  agile_modbus_rtu_init(&g_ctx_rtu, ctx_send_buf, sizeof(ctx_send_buf),
+                        ctx_read_buf, sizeof(ctx_read_buf));
+  agile_modbus_set_slave(g_ctx, g_stConfig.rtuSys.rtuAddr);
+
+  modbus_mutex = rt_mutex_create("modbus_mutex", RT_IPC_FLAG_PRIO);
 }

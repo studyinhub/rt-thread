@@ -6,22 +6,6 @@
 
 /* RT-Thread Kernel */
 
-#define RT_NAME_MAX 8
-#define RT_USING_SMP
-#define RT_CPUS_NR 2
-#define RT_ALIGN_SIZE 4
-#define RT_THREAD_PRIORITY_32
-#define RT_THREAD_PRIORITY_MAX 32
-#define RT_TICK_PER_SECOND 100
-#define RT_USING_OVERFLOW_CHECK
-#define RT_USING_HOOK
-#define RT_USING_IDLE_HOOK
-#define RT_IDLE_HOOK_LIST_SIZE 4
-#define IDLE_THREAD_STACK_SIZE 1024
-#define RT_USING_TIMER_SOFT
-#define RT_TIMER_THREAD_PRIO 4
-#define RT_TIMER_THREAD_STACK_SIZE 1024
-
 /* kservice optimization */
 
 #define RT_DEBUG
@@ -143,7 +127,6 @@
 
 /* Using USB */
 
-
 /* POSIX layer and C standard library */
 
 #define RT_USING_LIBC
@@ -225,9 +208,7 @@
 
 /* AT commands */
 
-
 /* VBUS(Virtual Software BUS) */
-
 
 /* Utilities */
 
@@ -235,82 +216,61 @@
 
 /* RT-Thread Utestcases */
 
-
 /* RT-Thread online packages */
 
 /* IoT - internet of things */
-
 
 /* Wi-Fi */
 
 /* Marvell WiFi */
 
-
 /* Wiced WiFi */
-
 
 /* IoT Cloud */
 
-
 /* security packages */
-
 
 /* language packages */
 
 /* JSON: JavaScript Object Notation, a lightweight data-interchange format */
 
-
 /* XML: Extensible Markup Language */
-
 
 /* multimedia packages */
 
 /* LVGL: powerful and easy-to-use embedded GUI library */
 
-
 /* u8g2: a monochrome graphic library */
 
-
 /* tools packages */
-
 
 /* system packages */
 
 /* enhanced kernel services */
 
-
 /* acceleration: Assembly language or algorithmic acceleration packages */
-
 
 /* CMSIS: ARM Cortex-M Microcontroller Software Interface Standard */
 
-
 /* Micrium: Micrium software products porting for RT-Thread */
-
 
 /* peripheral libraries and drivers */
 
 /* sensors drivers */
 
-
 /* touch drivers */
-
 
 /* Kendryte SDK */
 
-
 /* AI packages */
 
-
 /* Signal Processing and Control Algorithm Packages */
-
 
 /* miscellaneous packages */
 
 /* project laboratory */
 
 /* samples: kernel and components samples */
-
 
 /* entertainment: terminal games and other interesting software packages */
 

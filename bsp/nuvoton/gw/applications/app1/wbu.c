@@ -7,7 +7,10 @@
 
 #include <stdbool.h>
 
+#include "mySerial.h"
+
 #include "myModbus.h"
+#include "myUtils.h"
 
 #define LOG_TAG "wbu"
 #define LOG_LVL LOG_LVL_DBG
@@ -23,6 +26,13 @@ struct rt_messagequeue rtu_rsp_mq;
 rt_uint8_t rtu_rsp_pool[RTU_SEND_MQ_POOL];
 
 uint16_t PST_data[130] = {0};
+
+bool check_lrc(char *cmd, uint8_t lrc) {
+  char temp[128] = {0};
+  sprintf(temp, "%s ", cmd);
+  uint8_t calc_lrc = calculate_lrc((uint8_t *)temp, strlen(temp));
+  return lrc == calc_lrc ? true : false;
+}
 
 // Ver固定字符串
 static uint8_t ver_lable[13][120] = {"MED MR  (c)   AIRSYS "
@@ -186,7 +196,7 @@ void VerHandleWBU() // WBU机组Ver字符串处理函数(版本查询回复字�
   strcat((char *)pVerChr, (char const *)ver_lable[12]); //"          Type : "
   strcat((char *)pVerChr, "WBU");                       // "          WBU: "
 
-  strcat((char *)pVerChr, "\r\n"); // 回车换行
+  // strcat((char *)pVerChr, "\r\n"); // 回车换行
 
   rt_memset(ver_TXBuffer, '\0', sizeof(ver_TXBuffer));
   strcpy((char *)ver_TXBuffer, (char const *)pVerChr);
@@ -204,9 +214,11 @@ MSH_CMD_EXPORT_ALIAS(ver, VER, read device para);
 
 uint8_t rdp_TXBuffer[50] = {0}; // rdp回复字符串。用于发送
 
-void RdpHandleWBU(uint8_t RdpIndex, uint16_t regValue) {
+void RdpHandleWBU(uint8_t RdpIndex) {
 
   uint8_t DecValASCII[8];
+
+  uint16_t regValue = PST_data[RdpIndex];
 
   memset(rdp_TXBuffer, '\0', sizeof(rdp_TXBuffer));
 
@@ -224,7 +236,6 @@ void RdpHandleWBU(uint8_t RdpIndex, uint16_t regValue) {
     Dec_ASCII_BCD(regValue, 0, DecValASCII);
     strcat((char *)rdp_TXBuffer, (const char *)DecValASCII);
   }
-  strcat((char *)rdp_TXBuffer, "\r\n");
 }
 
 int rdp(int argc, char **argv) {
@@ -250,17 +261,15 @@ int rdp(int argc, char **argv) {
 
   if (index == 1) {
     RdpIndex = atoi(argv[1]);
-    regValue = PST_data[RdpIndex];
   } else if (index == 2) {
     RdpIndex = atoi(argv[2]);
     modbus_read_regs(g_ctx, RdpIndex, 1, PST_data + RdpIndex,
                      ARRAY_SIZE(PST_data));
-    regValue = PST_data[RdpIndex];
   }
 
-  RdpHandleWBU(RdpIndex, regValue);
+  RdpHandleWBU(RdpIndex);
 
-  rt_kprintf("%s", rdp_TXBuffer);
+  rt_kprintf("%s\r\n", rdp_TXBuffer);
   rt_memset(rdp_TXBuffer, '\0', sizeof(rdp_TXBuffer));
 
   return 0;
@@ -287,24 +296,24 @@ rt_err_t WrpHandleWBU(uint8_t WrpIndex, uint16_t WrpValue) {
   rtu_write.data[0] = WrpValue;
   ret = rt_mq_send(&rtu_req_mq, &rtu_write, sizeof(struct MB_REQ));
 
-  struct MB_RSP mb_rsp;
+  // struct MB_RSP mb_rsp;
 
-  // 等待回复
-  ret = rt_mq_recv(&rtu_rsp_mq, &mb_rsp, sizeof(struct MB_RSP),
-                   RT_TICK_PER_SECOND);
-  if (ret != RT_EOK) {
-    // 没有收到
-    if (ret == -RT_ETIMEOUT) {
-      // 超时了
-      // rt_kprintf("wrp timeout\r\n");
-    }
-    return ret;
-  }
+  // // 等待回复
+  // ret = rt_mq_recv(&rtu_rsp_mq, &mb_rsp, sizeof(struct MB_RSP),
+  //                  RT_TICK_PER_SECOND);
+  // if (ret != RT_EOK) {
+  //   // 没有收到
+  //   if (ret == -RT_ETIMEOUT) {
+  //     // 超时了
+  //     // rt_kprintf("wrp timeout\r\n");
+  //   }
+  //   return ret;
+  // }
 
-  if (rt_strcmp(mb_rsp.msg, "OK") != 0 || mb_rsp.addr != WrpIndex ||
-      mb_rsp.value != WrpValue) {
-    return ret;
-  }
+  // if (rt_strcmp(mb_rsp.msg, "OK") != 0 || mb_rsp.addr != WrpIndex ||
+  //     mb_rsp.value != WrpValue) {
+  //   return ret;
+  // }
 
   // rt_kprintf("addr:%d value:%d msg:%s", mb_rsp.addr, mb_rsp.value,
   //            (char *)mb_rsp.msg);
@@ -315,7 +324,7 @@ rt_err_t WrpHandleWBU(uint8_t WrpIndex, uint16_t WrpValue) {
   strcat((char *)rdp_TXBuffer, "]=");
   Dec_ASCII_BCD(WrpValue, 0, DecValASCII);
   strcat((char *)rdp_TXBuffer, (const char *)DecValASCII);
-  strcat((char *)rdp_TXBuffer, "\r\n");
+  // strcat((char *)rdp_TXBuffer, "\r\n");
 
   // modbus_write_regs(g_ctx, rtu_write.start_addr, rtu_write.wrRegQuantity,
   //                   rtu_write.data);
@@ -330,7 +339,9 @@ int wrp(int argc, char **argv) {
     goto __usage;
   }
 
-  if (argc > 3 || argc < 2) {
+  // rt_kprintf("argc:%d\r\n", argc);
+
+  if (argc > 4 || argc < 2) {
     goto __usage;
   }
 
@@ -341,7 +352,7 @@ int wrp(int argc, char **argv) {
   if (ret != RT_EOK) {
   }
 
-  rt_kprintf("%s", rdp_TXBuffer);
+  rt_kprintf("%s\r\n", rdp_TXBuffer);
   rt_memset(rdp_TXBuffer, '\0', sizeof(rdp_TXBuffer));
 
   return ret;
@@ -490,23 +501,12 @@ void StaHandleWBU() /// WBU机组sta字符串处理函数(状态查询回复字�
   strcat((char *)pStaChr, (char const *)HexValASCII);
 
   strcat((char *)pStaChr, (char const *)sta_labelWBU[15]); //"WBU",
-  strcat(pStaChr, " \r\n");                                // 回车换行
 }
 
 int sta(int argc, char **argv) {
 
-  if (argc == 1) {
-    StaHandleWBU();
-    rt_kprintf("%s\r\n", pStaChr);
-    return 0;
-  }
-
-  if (argc > 3 || argc < 2) {
-    goto __usage;
-  }
-
-__usage:
-  rt_kprintf("sta use wrong\r\n");
+  StaHandleWBU();
+  rt_kprintf("%s\r\n", pStaChr);
   return 0;
 }
 MSH_CMD_EXPORT(sta, get status);
@@ -519,7 +519,7 @@ static bool ALARM_GetOnOK = false;
 static char buffer_SendCommandErr[4352] = {0};
 static char buffer_SendCommandGetOffErr[3840] = {
     0}; // 报警触发恢复内容字符串，主动上传
-static uint8_t NoalarmStr[20] = "NO ALARM\r\n";
+static uint8_t NoalarmStr[20] = "NO ALARM";
 
 static uint8_t AlarmFlag[120] = {0}; // 当前64个报警状态
 static uint8_t AlarmFlagPre[120] = {
@@ -726,7 +726,7 @@ void SendErrorStr() {
         if (UnitType == 2) {
           strcat(buffer_SendCommandErr, AlarmDescriptionWBU[(ss * 16) + k]);
         }
-        strcat(buffer_SendCommandErr, "\r\n");
+        // strcat(buffer_SendCommandErr, "\r\n");
       } else {
         AlarmFlag[nn] = 0;
         AlarmFlagPre[nn] = 0;
@@ -738,9 +738,9 @@ void SendErrorStr() {
 int err(int argc, char **argv) {
   SendErrorStr();
   if (ALARM_OK == false) {
-    rt_kprintf("%s", NoalarmStr);
+    rt_kprintf("%s\r\n", NoalarmStr);
   } else {
-    rt_kprintf("%s", buffer_SendCommandErr);
+    rt_kprintf("%s\r\n", buffer_SendCommandErr);
   }
 }
 
@@ -846,25 +846,140 @@ void cmd_handler(rt_device_t dev, char *buf, uint8_t len) {
       return;
     }
 
+    // char temp[128];
+    // sprintf(temp, "argc:%d\r\n", argc);
+    // rt_device_write(dev, 0, temp, rt_strlen(temp));
+
     // 比较第一个参数 (命令名)
     if (rt_strcmp(argv[0], "ver") == 0 || rt_strcmp(argv[0], "VER") == 0) {
+      if (argc == 1) {
 
-      VerHandleWBU();
-      rt_device_write(dev, 0, ver_TXBuffer, rt_strlen(ver_TXBuffer));
+        VerHandleWBU();
+        rt_device_write(dev, 0, ver_TXBuffer, rt_strlen(ver_TXBuffer));
+      }
+      if (argc == 2) {
+        uint8_t input_lrc = ascii_to_uint8((const uint8_t *)argv[1]);
+        if (!check_lrc(argv[0], input_lrc))
+          return;
+
+        VerHandleWBU();
+        char output[512];
+        uint8_t out_lrc =
+            calculate_lrc((uint8_t *)ver_TXBuffer, strlen(ver_TXBuffer));
+
+        char lrc_ascii[3] = {0};
+        uint8_to_ascii(out_lrc, lrc_ascii);
+
+        sprintf(output, "%s %s\r\n", ver_TXBuffer, lrc_ascii);
+        rt_device_write(dev, 0, output, rt_strlen(output));
+      }
 
     } else if (rt_strcmp(argv[0], "sta") == 0 ||
                rt_strcmp(argv[0], "STA") == 0) {
-      StaHandleWBU();
-      rt_device_write(dev, 0, pStaChr, rt_strlen(pStaChr));
+
+      if (argc == 1) {
+        StaHandleWBU();
+        rt_device_write(dev, 0, pStaChr, rt_strlen(pStaChr));
+        return;
+      }
+      if (argc == 2) {
+        uint8_t input_lrc = ascii_to_uint8((const uint8_t *)argv[1]);
+        if (!check_lrc(argv[0], input_lrc))
+          return;
+
+        StaHandleWBU();
+        char output[512];
+        uint8_t out_lrc = calculate_lrc((uint8_t *)pStaChr, strlen(pStaChr));
+
+        char lrc_ascii[3] = {0};
+        uint8_to_ascii(out_lrc, lrc_ascii);
+
+        sprintf(output, "%s %s\r\n", pStaChr, lrc_ascii);
+
+        rt_device_write(dev, 0, output, rt_strlen(output));
+      }
+
+    } else if (rt_strcmp(argv[0], "err") == 0 ||
+               rt_strcmp(argv[0], "ERR") == 0) {
+
+      if (argc == 1) {
+        SendErrorStr();
+        if (ALARM_OK == false) {
+
+          rt_device_write(dev, 0, NoalarmStr, rt_strlen(NoalarmStr));
+
+        } else {
+          rt_device_write(dev, 0, buffer_SendCommandErr,
+                          rt_strlen(buffer_SendCommandErr));
+        }
+      } else if (argc == 2) {
+        uint8_t input_lrc = ascii_to_uint8((const uint8_t *)argv[1]);
+        if (!check_lrc(argv[0], input_lrc))
+          return;
+
+        SendErrorStr();
+
+        char output[512];
+
+        if (ALARM_OK == false) {
+
+          uint8_t out_lrc =
+              calculate_lrc((uint8_t *)NoalarmStr, strlen(NoalarmStr));
+
+          char lrc_ascii[3] = {0};
+          uint8_to_ascii(out_lrc, lrc_ascii);
+
+          sprintf(output, "%s %s\r\n", NoalarmStr, lrc_ascii);
+          rt_device_write(dev, 0, output, rt_strlen(output));
+
+          // rt_device_write rt_device_write(dev, 0, NoalarmStr,
+          //                                 rt_strlen(NoalarmStr));
+
+        } else {
+          uint8_t out_lrc = calculate_lrc((uint8_t *)buffer_SendCommandErr,
+                                          strlen(buffer_SendCommandErr));
+
+          char lrc_ascii[3] = {0};
+          uint8_to_ascii(out_lrc, lrc_ascii);
+
+          sprintf(output, "%s %s\r\n", buffer_SendCommandErr, lrc_ascii);
+          rt_device_write(dev, 0, output, rt_strlen(output));
+
+          // rt_device_write(dev, 0, buffer_SendCommandErr,
+          //                 rt_strlen(buffer_SendCommandErr));
+        }
+      }
+
     } else if (rt_strcmp(argv[0], "rdp") == 0 ||
                rt_strcmp(argv[0], "RDP") == 0) {
 
       uint16_t RdpIndex = atoi(argv[1]);
-      uint16_t regValue = PST_data[RdpIndex];
 
-      RdpHandleWBU(RdpIndex, regValue);
+      char output[1024] = {0};
+      if (argc == 2) {
+        RdpHandleWBU(RdpIndex);
+        sprintf(output, "%s\r\n", rdp_TXBuffer);
+        rt_device_write(dev, 0, output, rt_strlen(output));
+      }
 
-      rt_device_write(dev, 0, rdp_TXBuffer, rt_strlen(rdp_TXBuffer));
+      if (argc == 3) {
+        uint8_t input_lrc = ascii_to_uint8((const uint8_t *)argv[2]);
+
+        char temp[100] = {0};
+        sprintf(temp, "%s %s", argv[0], argv[1]);
+        if (!check_lrc(temp, input_lrc))
+          return;
+
+        RdpHandleWBU(RdpIndex);
+        uint8_t out_lrc =
+            calculate_lrc((uint8_t *)rdp_TXBuffer, strlen(rdp_TXBuffer));
+
+        char lrc_ascii[3] = {0};
+        uint8_to_ascii(out_lrc, lrc_ascii);
+        sprintf(output, "%s %s\r\n", rdp_TXBuffer, lrc_ascii);
+        rt_device_write(dev, 0, output, rt_strlen(output));
+      }
+
       rt_memset(rdp_TXBuffer, '\0', sizeof(rdp_TXBuffer));
     } else if (rt_strcmp(argv[0], "wrp") == 0 ||
                rt_strcmp(argv[0], "WRP") == 0) {
@@ -874,31 +989,52 @@ void cmd_handler(rt_device_t dev, char *buf, uint8_t len) {
 
       WrpIndex = atoi(argv[1]);
       WrpValue = atoi(argv[2]);
+      char temp[100] = {0};
+      char output[1024] = {0};
 
-      rt_err_t ret = WrpHandleWBU(WrpIndex, WrpValue);
-      if (ret != RT_EOK) {
+      if (argc == 3) {
+        rt_err_t ret = WrpHandleWBU(WrpIndex, WrpValue);
+        if (ret != RT_EOK) {
+          // sprintf(temp, "%s", "WRP ERR\r\n");
+          // rt_device_write(dev, 0, temp, rt_strlen(temp));
+          return;
+        } else {
+          rt_device_write(dev, 0, rdp_TXBuffer, rt_strlen(rdp_TXBuffer));
+        }
       }
-      rt_device_write(dev, 0, rdp_TXBuffer, rt_strlen(rdp_TXBuffer));
+
+      if (argc == 4) {
+        uint8_t input_lrc = ascii_to_uint8((const uint8_t *)argv[3]);
+
+        char temp[100] = {0};
+        sprintf(temp, "%s %s %s", argv[0], argv[1], argv[2]);
+        if (!check_lrc(temp, input_lrc))
+          return;
+
+        rt_err_t ret = WrpHandleWBU(WrpIndex, WrpValue);
+
+        if (ret != RT_EOK) {
+          // sprintf(temp, "%s", "WRP ERR\r\n");
+          // rt_device_write(dev, 0, temp, rt_strlen(temp));
+          return;
+        } else {
+          uint8_t out_lrc =
+              calculate_lrc((uint8_t *)rdp_TXBuffer, strlen(rdp_TXBuffer));
+
+          char lrc_ascii[3] = {0};
+          uint8_to_ascii(out_lrc, lrc_ascii);
+          sprintf(output, "%s %s\r\n", rdp_TXBuffer, lrc_ascii);
+
+          rt_device_write(dev, 0, output, rt_strlen(output));
+        }
+      }
+
       rt_memset(rdp_TXBuffer, '\0', sizeof(rdp_TXBuffer));
-
-    } else if (rt_strcmp(argv[0], "err") == 0 ||
-               rt_strcmp(argv[0], "ERR") == 0) {
-      SendErrorStr();
-      if (ALARM_OK == false) {
-        rt_device_write(dev, 0, NoalarmStr, rt_strlen(NoalarmStr));
-
-      } else {
-        rt_device_write(dev, 0, buffer_SendCommandErr,
-                        rt_strlen(buffer_SendCommandErr));
-      }
     }
-  } else {
-    // rt_kprintf("cmd handler error\n");
   }
 }
 
 int reg(int argc, char **argv) {
-
   LOG_HEX("PST_data", 20, (unsigned char *)PST_data, READ_HOLDING_CNT * 2);
 }
 

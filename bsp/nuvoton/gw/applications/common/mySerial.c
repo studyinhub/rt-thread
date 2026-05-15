@@ -73,14 +73,19 @@ int rs485_send(struct SER_PORT *port, uint8_t *buf, int len) {
       log_e("send_error:%d", len);
     }
   }
-  rt_sem_take(&port->lock_sem, RT_WAITING_FOREVER);
+  // rt_sem_take(&port->lock_sem, RT_WAITING_FOREVER);
   write_len = rt_device_write(dev, 0, buf, len);
   // if(rt_strcmp(port->dev_name,"uart8")!=0)
   //    log_d("write_len:%d,%d",write_len,len);
   if (write_len != len) {
     log_e("not all data wrote");
   }
-  rt_sem_release(&port->lock_sem);
+
+  rt_thread_mdelay(len * 2 + 5);
+
+  // 485 方向稳定延时
+  rt_thread_mdelay(1);
+  // rt_sem_release(&port->lock_sem);
 
   // if (!rt_strcmp((char *)dev->parent.name, "uart6"))
   // {
@@ -102,6 +107,8 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
   //   log_w("drain read_buf");
   //   rt_memset(buf, 0, bufsz);
   // }
+
+  uart_flush_rx(dev);
 
   /* 从串口读取一个字节的数据，没有读取到则等待接收信号量 */
   int rc = 0;
@@ -138,7 +145,7 @@ int rs485_receive(struct SER_PORT *port, uint8_t *buf, int bufsz, int timeout) {
 
   // uart_flush_rx(dev);
 
-  rt_sem_release(&port->lock_sem);
+  // rt_sem_release(&port->lock_sem);
 
   return len;
 }

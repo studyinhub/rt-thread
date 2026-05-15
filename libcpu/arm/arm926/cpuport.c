@@ -149,7 +149,7 @@ rt_base_t rt_hw_cpu_dcache_status()
 RT_WEAK void rt_hw_cpu_reset()
 {
 
-    rt_kprintf("Restarting system...\n");
+    // rt_kprintf("Restarting system...\n");
     machine_reset();
 
     while (1);   /* loop forever and wait for reset to happen */

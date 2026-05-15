@@ -35,7 +35,6 @@ int main() {
 
   while (1) {
     feed_wdt(1);
-
     rt_thread_mdelay(1000);
   }
 

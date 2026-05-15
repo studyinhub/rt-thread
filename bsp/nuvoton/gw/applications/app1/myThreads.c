@@ -17,79 +17,89 @@ ALIGN(RT_ALIGN_SIZE)
 static char thread_rtu_master_stack[1024];
 static struct rt_thread thread_rtu_master;
 
-static void rtu_master_init(void) {
-  // 13*16 - 3 =  208
-  //
-  // agile_modbus_rtu_t ctx_rtu;
-  // agile_modbus_t *ctx = &ctx_rtu._ctx;
-  agile_modbus_rtu_init(&g_ctx_rtu, ctx_send_buf, sizeof(ctx_send_buf),
-                        ctx_read_buf, sizeof(ctx_read_buf));
-  agile_modbus_set_slave(g_ctx, g_stConfig.rtuSys.rtuAddr);
-}
-
-static void thread_rtu_master_entry(void *parameter) {
-
-  int i = 0, got_ascAddr = 0, cnt = 0, send_len = 0, read_len = 0, rc = 0;
-  rt_err_t ret = RT_EOK;
+static void thread_rtu_write_entry(void *parameter) {
+  rt_err_t ret;
+  struct MB_REQ rtu_write;
 
   rtu_master_init();
-  uart6_dev = rt_device_find("uart6");
-  uart1_dev = rt_device_find("uart1");
-
-  // g_stConfig.rtuSys.scanRegCnt = 130;
-  // g_stConfig.rtuSys.hold =
-  //     rt_malloc(sizeof(uint16_t) * g_stConfig.rtuSys.scanRegCnt);
-  // rt_memset(g_stConfig.rtuSys.hold, 0,
-  //           sizeof(uint16_t) * g_stConfig.rtuSys.scanRegCnt);
 
   while (1) {
+    // 阻塞等待写入消息（有消息才执行，不占用CPU）
+    ret = rt_mq_recv(&rtu_req_mq, &rtu_write, sizeof(struct MB_REQ),
+                     RT_WAITING_FOREVER);
 
-    // 总扫描开关
-    if (!g_stConfig.rtuSys.scanEnable) {
-      rt_thread_delay(1);
-      continue;
-    }
-
-    // write first
-    if (rtu_req_mq.entry) {
-      struct MB_REQ rtu_write;
-      ret = rt_mq_recv(&rtu_req_mq, &rtu_write, sizeof(struct MB_REQ), 0);
-      // log_d("rtu_write.start_addr:%d", rtu_write.start_addr);
-      // log_d("rtu_write.wrRegQuantity:%d", rtu_write.wrRegQuantity);
-      // log_d("rtu_write.data[0]:%d", rtu_write.data[0]);
-
+    if (ret == RT_EOK) {
+      // 执行写入
       ret = modbus_write_regs(g_ctx, rtu_write.start_addr,
                               rtu_write.wrRegQuantity, rtu_write.data);
 
-      if (ret != RT_EOK) {
+      if (ret == RT_EOK) {
 
-        continue;
+        PST_data[rtu_write.start_addr] = rtu_write.data[0];
+
+        // 回复消息
+        struct MB_RSP rtu_rsp;
+        rtu_rsp.addr = rtu_write.start_addr;
+        rtu_rsp.value = PST_data[rtu_write.start_addr];
+        sprintf(rtu_rsp.msg, "OK");
+        rt_mq_send(&rtu_rsp_mq, &rtu_rsp, sizeof(struct MB_RSP));
       }
-
-      modbus_read_regs(g_ctx, rtu_write.start_addr, 1,
-                       PST_data + rtu_write.start_addr, ARRAY_SIZE(PST_data));
-
-      struct MB_RSP rtu_rsp;
-      rtu_rsp.addr = rtu_write.start_addr;
-      rtu_rsp.value = PST_data[rtu_write.start_addr];
-      sprintf(rtu_rsp.msg, "%s", "OK");
-      rt_mq_send(&rtu_rsp_mq, &rtu_rsp, sizeof(struct MB_RSP));
-
-      // char index_str[8];
-      // rt_sprintf(index_str, "%d", rtu_write.start_addr);
-      // char *argv[] = {"rdp", index_str, NULL};
-      // rdp(2, argv);
-    } else {
-      modbus_read_regs(g_ctx, 0, READ_HOLDING_CNT, PST_data,
-                       ARRAY_SIZE(PST_data));
-
-      UnitType = PST_data[50];
-      SendErrorGetOffStr();
     }
-
-    rt_thread_mdelay(500);
   }
 }
+
+static void thread_rtu_read_entry(void *parameter) {
+  while (1) {
+    // 周期读取
+    modbus_read_regs(g_ctx, 0, READ_HOLDING_CNT, PST_data,
+                     ARRAY_SIZE(PST_data));
+
+    UnitType = PST_data[50];
+    SendErrorGetOffStr();
+
+    rt_thread_mdelay(200); // 读取延时不影响写入！
+  }
+}
+
+// static void thread_rtu_master_entry(void *parameter) {
+
+//   int i = 0, got_ascAddr = 0, cnt = 0, send_len = 0, read_len = 0, rc = 0;
+//   rt_err_t ret = RT_EOK;
+
+//   rtu_master_init();
+//   uart6_dev = rt_device_find("uart6");
+//   uart1_dev = rt_device_find("uart1");
+
+//   struct MB_REQ rtu_write;
+//   while (1) {
+//     if (rtu_req_mq.entry) {
+//       ret = rt_mq_recv(&rtu_req_mq, &rtu_write, sizeof(struct MB_REQ), 0);
+
+//       // 内部包含重写
+//       ret = modbus_write_regs(g_ctx, rtu_write.start_addr,
+//                               rtu_write.wrRegQuantity, rtu_write.data);
+
+//       // 如何重写都失败了，那么就不需要再读取校验并返回了
+//       if (ret != RT_EOK) {
+//         continue;
+//       }
+//       PST_data[rtu_write.start_addr] = rtu_write.data[0];
+
+//       struct MB_RSP rtu_rsp;
+//       rtu_rsp.addr = rtu_write.start_addr;
+//       rtu_rsp.value = PST_data[rtu_write.start_addr];
+//       sprintf(rtu_rsp.msg, "%s", "OK");
+//       rt_mq_send(&rtu_rsp_mq, &rtu_rsp, sizeof(struct MB_RSP));
+//     }
+
+//     modbus_read_regs(g_ctx, 0, READ_HOLDING_CNT, PST_data,
+//                      ARRAY_SIZE(PST_data));
+
+//     UnitType = PST_data[50];
+//     SendErrorGetOffStr();
+//     rt_thread_mdelay(1000);
+//   }
+// }
 
 void serial_thread_entry(void *parameter) {
 
@@ -166,12 +176,22 @@ int threads_init(void) {
     return -1;
   }
 
-  rt_thread_init(&thread_rtu_master, "rtu_master", thread_rtu_master_entry,
-                 RT_NULL, &thread_rtu_master_stack[0],
-                 sizeof(thread_rtu_master_stack), THREAD_PRIORITY,
-                 THREAD_TIMESLICE);
+  rt_thread_t write_tid, read_tid;
 
-  rt_thread_startup(&thread_rtu_master);
+  write_tid = rt_thread_create("rtu_write", thread_rtu_write_entry, RT_NULL,
+                               2048, 15, 10);
+  read_tid = rt_thread_create("rtu_read", thread_rtu_read_entry, RT_NULL, 2048,
+                              15, 10);
+
+  rt_thread_startup(write_tid);
+  rt_thread_startup(read_tid);
+
+  // rt_thread_init(&thread_rtu_master, "rtu_master", thread_rtu_master_entry,
+  //                RT_NULL, &thread_rtu_master_stack[0],
+  //                sizeof(thread_rtu_master_stack), THREAD_PRIORITY,
+  //                THREAD_TIMESLICE);
+
+  // rt_thread_startup(&thread_rtu_master);
 
   return 0;
 }

@@ -5,8 +5,8 @@
 #include "myWebnet.h"
 
 #define LOG_TAG "myConfig"
-#define LOG_LVL LOG_LVL_DBG
-// #define LOG_LVL LOG_LVL_INFO
+// #define LOG_LVL LOG_LVL_DBG
+#define LOG_LVL LOG_LVL_ASSERT
 #include <ulog.h>
 
 char g_FmtTimeStr[50];
